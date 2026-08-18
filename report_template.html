@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{COMPANY_NAME}} · 七步财报分析</title>
+<!-- 图表库本地化：随报告拷贝 assets/ 即可离线查看；缺失时自动回退 CDN -->
+<script src="assets/chart.umd.min.js"></script>
+<script src="assets/chartjs-plugin-datalabels.min.js"></script>
+<style>
+/* ===== 设计系统 ===== */
+:root {
+    --navy: #0a1628;
+    --navy-mid: #152238;
+    --gold: #c8943b;
+    --gold-light: #d4a853;
+    --white: #ffffff;
+    --off-white: #f8f9fb;
+    --gray-light: #dde0e5;
+    --gray-border: #c4c8ce;
+    --text: #1a1a2e;
+    --text-secondary: #4a5468;
+    --green: #0d7c3b;
+    --red: #b71c1c;
+    --blue: #1e5fb4;
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.06);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    /* ===== 语义色（结论分色 / 涨跌 / 数据可信度，P1-5 升级） ===== */
+    --good: #0d7c3b;      /* 利好/优 */
+    --bad:  #b71c1c;      /* 风险/劣 */
+    --warn: #c8943b;      /* 关注/中性 */
+    --info: #1e5fb4;      /* 信息/机会 */
+    --risk-bg: #fdeaea; --risk-bd: #b71c1c;
+    --opp-bg:  #e8f5e9; --opp-bd:  #0d7c3b;
+    --info-bg: #eaf1fb; --info-bd: #1e5fb4;
+    /* 图表统一调色板（与 JS window.__c 对齐，替代游离 purple） */
+    --chart-1: #1e5fb4;  /* accent 蓝 */
+    --chart-2: #0d7c3b;  /* 绿 */
+    --chart-3: #b71c1c;  /* 红 */
+    --chart-4: #c8943b;  /* 金 */
+    --chart-5: #5b8def;  /* 浅蓝(替代 purple，更贴科技金融) */
+    --chart-6: #2e8b57;  /* 墨绿 */
+    --tier-online: #5c3d99; /* 数据档位 ONLINE 语义紫（收进 token，去游离硬编码） */
+    /* ===== 字号阶梯 Type Scale（P2 一致性升级，h2 三处统一 22px） ===== */
+    --fs-hero: 42px; --fs-h2: 22px; --fs-h3: 17px;
+    --fs-body: 15px; --fs-sm: 13px; --fs-xs: 11px;
+}
+
+/* ============================================================
+   内容层槽位占位（P3-3 升级 · 五件套 M1/M4 渲染钩子）
+   视觉样式归「七步财报HTML设计升级方案」，此处仅预留类与结构约定。
+   报告生成时三类内容请使用如下 HTML 结构：
+   · .human-term-card  人话卡   → 术语首次出现配大白话+生活类比（M1 术语人话卡）
+   · .anti-assumption   反面假设 → "也可能是…"反证块（五件套④四链）
+   · .watch-what        盯什么   → 📌 普通投资者要点（五件套⑤五用）
+   ============================================================ */
+.human-term-card { /* TODO 设计层填充：卡片底/边框/图标 */ }
+.anti-assumption { /* TODO 设计层填充：浅色警示底 */ }
+.watch-what     { /* TODO 设计层填充：要点高亮底 */ }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: "PingFang SC","Microsoft YaHei","Hiragino Sans GB",sans-serif;
+    background: var(--off-white);
+    color: var(--text);
+    line-height: 1.75;
+    font-size: 15px;
+}
+
+/* ===== 图表容器/表格/结论 统一样式见下方 .step-body / .conclusion-wrap / .step-body table 等定义（已清理旧版重复 CSS） ===== */
+
+/* Hero - PDF优化版 */
+.hero {
+    background: #0a1628;
+    color: var(--white);
+    padding: 60px 0 50px;
+    border-bottom: 4px solid var(--gold);
+    position: relative;
+    overflow: hidden;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+}
+.hero-content { position: relative; z-index: 2; max-width: 1100px; margin: 0 auto; padding: 0 40px; }
+/* P2-2 Hero 视觉锚点：科技金融数据曲线底纹（opacity 0.12，金/蓝调，呼应主题） */
+.hero::before {
+    content: ''; position: absolute; inset: 0; z-index: 1;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='400' viewBox='0 0 1200 400'%3E%3Cpath d='M0 300 C200 250 400 350 600 280 S1000 200 1200 240' fill='none' stroke='%235b8def' stroke-width='2'/%3E%3Cpath d='M0 340 C200 300 400 380 600 320 S1000 250 1200 290' fill='none' stroke='%23c8943b' stroke-width='2'/%3E%3C/svg%3E");
+    background-size: cover; background-position: center right;
+    opacity: 0.12; pointer-events: none;
+}
+.hero h1 {
+    font-size: 42px; font-weight: 900; letter-spacing: 2px;
+    margin-bottom: 16px;
+    color: #f0e6d0;
+    text-shadow: 0 2px 12px rgba(200,148,59,0.3);
+}
+.hero .badge {
+    display: inline-block;
+    background: rgba(200,148,59,0.2);
+    border: 1.5px solid rgba(200,148,59,0.5);
+    color: #e0c17d;
+    padding: 7px 22px; border-radius: 20px;
+    font-size: 14px; font-weight: 700; letter-spacing: 2px;
+    margin-bottom: 22px;
+}
+.hero .subtitle { font-size: 16px; opacity: 0.85; max-width: 650px; line-height: 1.6; }
+.hero .meta-row { display: flex; gap: 35px; margin-top: 35px; flex-wrap: wrap; }
+.hero .mt { display: flex; flex-direction: column; }
+.hero .mt-l { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.5; color: #8a9bbf; }
+.hero .mt-v { font-size: 14px; margin-top: 6px; opacity: 0.95; color: #e8e8e8; font-weight: 600; }
+
+/* Main wrap */
+.main-wrap { max-width: 1100px; margin: 0 auto; padding: 0 30px; }
+
+/* TOC */
+.toc-card {
+    background: var(--white);
+    border-radius: var(--radius-lg); padding: 40px;
+    box-shadow: var(--shadow-lg); border: 1px solid var(--gray-light);
+    margin: 20px 0 50px;
+    position: relative; z-index: 10;
+}
+.toc-title {
+    font-size: 18px; font-weight: 800; color: var(--navy);
+    margin-bottom: 22px; padding-bottom: 14px;
+    border-bottom: 2px solid var(--gold);
+}
+.toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 10px; }
+.toc-item {
+    display: flex; align-items: center;
+    padding: 13px 16px; background: var(--off-white);
+    border-radius: var(--radius-sm); cursor: pointer;
+    transition: all 0.25s; border-left: 3px solid transparent;
+}
+.toc-item:hover { background: var(--navy); color: var(--white); border-left-color: var(--gold); transform: translateX(4px); }
+.toc-num { font-size: 22px; font-weight: 900; color: var(--gold); margin-right: 14px; min-width: 36px; text-align: center; }
+.toc-item:hover .toc-num { color: var(--white); }
+.toc-l { font-size: 13px; }
+.toc-l .t { display: block; font-weight: 700; }
+.toc-l .d { display: block; font-size: 11px; opacity: 0.55; margin-top: 2px; }
+
+/* Executive summary */
+.exec-summary {
+    background: var(--white);
+    border-radius: var(--radius-lg); padding: 45px;
+    box-shadow: var(--shadow-md); border: 1px solid var(--gray-light);
+    margin-bottom: 50px;
+}
+.exec-summary h2 {
+    font-size: var(--fs-h2); font-weight: 800; color: var(--navy);
+    margin-bottom: 25px; padding-bottom: 15px;
+    border-bottom: 2px solid var(--gold);
+}
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin: 28px 0; }
+.kpi-card {
+    background: var(--off-white);
+    border-radius: var(--radius-sm); padding: 18px;
+    border-left: 3px solid var(--blue);
+}
+.kpi-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+.kpi-value { font-size: 22px; font-weight: 800; color: var(--navy); }
+.kpi-delta { font-size: 12px; margin-top: 4px; color: var(--text-secondary); }
+.kpi-delta.up, .kpi-delta.d { color: var(--green) !important; font-weight: 700; }
+.kpi-delta.down, .kpi-delta.r { color: var(--red) !important; font-weight: 700; }
+.warning-box {
+    background: #fef3e2; border: 1px solid rgba(200,148,59,0.2);
+    border-left: 4px solid var(--gold);
+    padding: 16px 20px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    margin-top: 25px; color: #7a5d00; font-size: 14px;
+}
+.warning-box strong { color: #6b4c00; }
+/* §1.8: WARNING_BOX 须用 ul/li 分行，≤5条，每条一行；ul{list-style:disc} li{margin:5px 0;line-height:1.7} */
+.warning-box ul { margin: 8px 0 4px 20px; padding: 0; list-style: disc; }
+.warning-box ul li { margin: 5px 0; line-height: 1.7; }
+
+/* ===== 数据来源与口径说明框 + 档位徽章（落地 SKILL §1.1.1 可信度档位） ===== */
+.source-box { background: var(--off-white); border: 1px solid var(--gray-light); border-left: 4px solid var(--blue); border-radius: var(--radius-md); padding: 16px 20px; margin: 20px 0; font-size: 13px; }
+.source-box .sb-title { font-size: 14px; font-weight: 800; color: var(--navy); margin-bottom: 8px; }
+.source-box p { color: var(--text-secondary); margin: 4px 0; line-height: 1.7; }
+.tier-badge { display: inline-block; padding: 3px 14px; border-radius: 14px; font-size: 12px; font-weight: 800; letter-spacing: 1px; margin-left: 8px; vertical-align: middle; }
+.tier-rich { background: #e8f5e9; color: #0d7c3b; border: 1.5px solid #0d7c3b; }
+.tier-medium { background: #eaf1fb; color: #1e5fb4; border: 1.5px solid #1e5fb4; }
+.tier-lean { background: #fef3e2; color: #a86a12; border: 1.5px solid #c8943b; }
+.tier-online { background: #f0eaf7; color: var(--tier-online); border: 1.5px solid var(--tier-online); }
+/* 投资评级徽章（按 买入/持有/卖出 动态着色，AI 生成时加对应 class） */
+.rating-badge { display: inline-block; padding: 8px 24px; border-radius: 20px; font-size: 16px; font-weight: 700; margin-bottom: 20px; border: 2px solid var(--gold); background: #fdf8ee; color: var(--navy); }
+.rating-badge.rating-buy { background: #e8f5e9; color: #0d7c3b; border-color: #0d7c3b; }
+.rating-badge.rating-hold { background: #fef3e2; color: #a86a12; border-color: #c8943b; }
+.rating-badge.rating-sell { background: #fdeaea; color: #b71c1c; border-color: #b71c1c; }
+
+/* ===== Step Section ===== */
+.step-wrap {
+    background: var(--white);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-md);
+    margin-bottom: 50px; overflow: hidden;
+    border: 1px solid var(--gray-light);
+}
+.step-bar {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-mid) 100%);
+    color: var(--white);
+    padding: 22px 30px; display: flex; align-items: center; gap: 20px;
+}
+.step-num { font-size: 38px; font-weight: 900; opacity: 0.12; line-height: 1; min-width: 48px; }
+.step-info h3 { font-size: 20px; font-weight: 700; margin-bottom: 3px; }
+.step-info p { font-size: 12px; opacity: 0.5; }
+.step-body { padding: 32px; }
+
+/* 覆盖原 h2/h3 */
+.step-body h2 {
+    font-size: var(--fs-h2); color: var(--navy);
+    margin: 28px 0 14px; padding-bottom: 10px;
+    border-bottom: 2px solid var(--gray-light);
+    font-weight: 700; border-left: none;
+}
+.step-body h2:first-child, .exec-summary-section h2:first-child { margin-top: 0; }
+.step-body h3, .exec-summary-section h3 {
+    font-size: var(--fs-h3); color: var(--navy);
+    margin: 20px 0 12px; font-weight: 700;
+}
+
+/* ===== TABLES — 每格都有框线！===== */
+.step-card table, .step-body table, .data-table {
+    width: 100%; border-collapse: collapse;
+    margin: 18px 0; font-size: 13px;
+    border: 1px solid var(--gray-border);
+    border-radius: var(--radius-sm); overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    table-layout: auto;
+}
+.step-card thead th, .step-body thead th, .exec-summary-section thead th {
+    background: var(--navy);
+    color: var(--white);
+    padding: 12px 10px;
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    text-align: center;
+    border: 1px solid var(--navy-mid);
+}
+.step-card tbody td, .step-body tbody td, .exec-summary-section tbody td {
+    padding: 10px 12px;
+    text-align: center;
+    border: 1px solid var(--gray-light);
+    vertical-align: middle;
+}
+.step-card tbody tr:nth-child(even) td, .step-body tbody tr:nth-child(even) td, .exec-summary-section tbody tr:nth-child(even) td {
+    background: var(--off-white);
+}
+.step-card tbody tr:hover td, .step-body tbody tr:hover td, .exec-summary-section tbody tr:hover td {
+    background: #e8f0fe;
+}
+
+/* ===== STATUS BADGES (替换裸 ✅/⚠️ 字符) ===== */
+.status-badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+.status-verified { background: #e8f5e9; color: #1b5e20; border: 1px solid #4caf50; }
+.status-explained { background: #fff3e0; color: #e65100; border: 1px solid #ff9800; }
+.status-gap { background: #ffebee; color: #b71c1c; border: 1px solid #ef5350; }
+.status-info { background: #e3f2fd; color: #0d47a1; border: 1px solid #2196f3; }
+
+/* ===== 章节间距 (避免异常点表紧贴下一步图表) ===== */
+.step-card { padding-bottom: 32px; }
+.step-card > canvas { margin-top: 16px; }
+
+/* 语义化涨跌色（替代 inline color 写死 + !important 强覆盖的脆弱 hack） */
+.up, .d { color: var(--green) !important; font-weight: 700; }
+.down, .r { color: var(--red) !important; font-weight: 700; }
+
+/* ===== Chart Cards ===== */
+.step-body .chart-container {
+    background: var(--white);
+    border-radius: var(--radius-md);
+    padding: 20px; margin: 22px 0;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--gray-light);
+    height: 400px;
+    position: relative;
+    display: block;
+}
+.step-body .chart-container canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Blockquote */
+.step-body blockquote {
+    background: #fef9e7;
+    border: 1px solid rgba(200,148,59,0.15);
+    border-left: 4px solid var(--gold);
+    padding: 14px 18px; margin: 16px 0;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: #6b4c00; font-size: 14px;
+}
+.step-body blockquote strong { color: #4a3000; }
+
+/* Summary boxes */
+.step-body .summary-box {
+    background: var(--off-white);
+    border: 1px solid var(--gray-light);
+    border-left: 4px solid var(--blue);
+    padding: 18px 22px; margin: 18px 0;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 14px; line-height: 1.8;
+}
+.step-body .summary-box p { margin-bottom: 8px; }
+.step-body .summary-box p:last-child { margin-bottom: 0; }
+
+/* Strong tags */
+.step-body strong { color: var(--navy); font-weight: 700; }
+
+/* ===== Conclusion Boxes — 分段显示！===== */
+.conclusion-wrap {
+    background: linear-gradient(135deg, #fdf8ee 0%, #f7efd0 100%);
+    border-radius: var(--radius-md); padding: 30px;
+    margin: 30px 0 8px;
+    border: 1px solid rgba(200,148,59,0.25);
+    box-shadow: var(--shadow-sm);
+}
+.conclusion-wrap .ct {
+    font-size: 18px; font-weight: 800; color: var(--navy);
+    margin-bottom: 20px; padding-bottom: 14px;
+    border-bottom: 2px solid var(--gold);
+}
+.conclusion-wrap .cs {
+    margin-bottom: 16px;
+    padding: 14px 18px;
+    background: rgba(255,255,255,0.55);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--gold);
+    display: block;
+}
+.conclusion-wrap .cs:last-child { margin-bottom: 0; }
+.conclusion-wrap .cl {
+    font-size: 14px; font-weight: 800; color: var(--navy);
+    margin-bottom: 8px;
+    display: block;
+}
+.conclusion-wrap .ctext {
+    font-size: 14px; line-height: 1.85;
+    color: var(--text-secondary);
+    display: block;
+}
+.conclusion-wrap .ctext b, .conclusion-wrap .ctext strong { 
+    color: var(--navy); font-weight: 700; 
+}
+
+/* 段落排版 */
+.conclusion-wrap .ctext p {
+    margin-bottom: 10px;
+    line-height: 1.85;
+}
+.conclusion-wrap .ctext p:last-child {
+    margin-bottom: 0;
+}
+.conclusion-wrap .ctext p.item {
+    padding-left: 14px;
+    border-left: 2px solid rgba(200,148,59,0.3);
+    margin-bottom: 8px;
+    margin-left: 4px;
+    font-size: 13.5px;
+}
+/* 每条序号/数字独立一行 */
+.conclusion-wrap .ctext .line {
+    display: block;
+    padding: 3px 0;
+    padding-left: 0;
+}
+.conclusion-wrap .ctext .line-num {
+    display: block;
+    padding: 2px 0 2px 12px;
+    border-left: 2px solid rgba(200,148,59,0.3);
+    margin: 3px 0;
+}
+
+/* Appendix */
+.appendix {
+    background: var(--white);
+    border-radius: var(--radius-lg); padding: 40px;
+    box-shadow: var(--shadow-md); margin-bottom: 50px;
+    border: 1px solid var(--gray-light);
+}
+.appendix h2 {
+    font-size: 20px; font-weight: 800; color: var(--navy);
+    margin-bottom: 20px; padding-bottom: 12px;
+    border-bottom: 2px solid var(--gold);
+}
+.appendix p { font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.8; }
+
+.report-footer {
+    text-align: center;
+    padding: 30px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    border-top: 1px solid var(--gray-light);
+}
+
+/* ===== 全局颜色统一 ===== */
+.up { color: var(--green) !important; font-weight: 700; }
+.down { color: var(--red) !important; font-weight: 700; }
+/* KPI 涨跌动态着色（AI 生成 KPI 卡片时按方向加 .up / .down） */
+.kpi-delta { font-size: 12px; margin-top: 4px; color: var(--text-secondary); }
+.kpi-delta.up { color: var(--green); }
+.kpi-delta.down { color: var(--red); }
+
+/* 空容器处理 */
+.exec-summary-section-fallback { font-size: 13px; color: var(--text-secondary); }
+
+/* ===== 响应式：平板 / 手机 ===== */
+@media (max-width: 900px){
+  .step-body .chart-container { height: 340px; padding: 16px; }
+  .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+}
+@media (max-width: 768px){
+  .main-wrap { padding: 0 14px; }
+  .hero { padding: 32px 16px; }
+  .hero h1 { font-size: 26px; }
+  .hero .subtitle { font-size: 14px; }
+  .hero .meta-row { gap: 18px; }
+  .exec-summary { padding: 24px 18px; }
+  .step-body { padding: 22px 16px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .kpi-card { padding: 14px; }
+  .kpi-value { font-size: 19px; }
+  .step-body .chart-container { height: 300px; }
+  .source-box, .warning-box { padding: 14px 16px; }
+}
+@media (max-width: 480px){
+  .kpi-grid { grid-template-columns: 1fr; }
+  .hero h1 { font-size: 22px; }
+  .hero .meta-row { flex-direction: column; gap: 10px; }
+  .step-body .chart-container { height: 260px; padding: 12px; }
+  .toc-grid { grid-template-columns: 1fr; }
+}
+
+/* Print */
+@media print {
+    body { 
+        background: var(--white); 
+        margin: 0;
+        padding: 0;
+    }
+    .hero { 
+        background: var(--navy) !important; 
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    /* 每个大步骤从新页开始 */
+    .step-wrap { 
+        break-inside: avoid;
+        page-break-inside: avoid;
+        box-shadow: none; 
+        border: 1px solid #ddd; 
+        margin-bottom: 20px;
+    }
+    /* 图表容器不跨页分割 */
+    .chart-container {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    /* 结论框不跨页分割 */
+    .conclusion-wrap {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    /* 表格不跨页分割（小表） */
+    table {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    /* 每个完整的 cs 段落块不分割 */
+    .cs {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    /* 标题后不立即分页 */
+    h2, h3 {
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+    /* 执行摘要和附录各自完整 */
+    .appendix-wrap {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    /* 避免孤立行 */
+    p, li {
+        orphans: 3;
+        widows: 3;
+    }
+    .page-break {
+        page-break-before: always;
+        break-before: page;
+    }
+    /* 打印隐藏浮动导航与骨架（避免纸张上出现固定条/闪烁残影） */
+    .side-nav, .top-progress, .chart-skeleton { display: none !important; }
+}
+/* ============================================================
+   P0+P1 设计升级组件（table-scroll / chart-empty / side-nav / conclusion tone / chart-card）
+   全部为新增 class，向后兼容旧结构（旧 .chart-container / 无 tone 结论框回退默认样式）
+   ============================================================ */
+
+/* P0-1 表格移动端横向滚动（包裹层，gen_report.py 自动注入） */
+.table-scroll{ width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; margin:18px 0; }
+.table-scroll table{ margin:0; min-width:640px; }
+@media (max-width:768px){ .table-scroll table{ font-size:11px; } }
+
+/* P0-3 图表空数据友好兜底（无同行可比时显示，替代空白坐标轴） */
+.chart-empty{ display:flex; align-items:center; justify-content:center; height:300px;
+  background:var(--off-white); border:1px dashed var(--gray-border); border-radius:var(--radius-md);
+  color:var(--text-secondary); font-size:14px; text-align:center; line-height:1.8; padding:20px; }
+
+/* P1-4 粘性侧边导航（桌面 ≥1200px） */
+.side-nav{ position:fixed; top:120px; left:24px; width:200px; z-index:40;
+  background:var(--white); border:1px solid var(--gray-light); border-radius:var(--radius-md);
+  padding:14px; box-shadow:var(--shadow-sm); max-height:72vh; overflow:auto;
+  transition:opacity .3s ease, transform .3s ease, visibility .3s; }
+.side-nav.nav-hidden{ opacity:0; pointer-events:none; transform:translateX(-12px); visibility:hidden; }
+.side-nav .sn-title{ font-size:12px; font-weight:800; color:var(--navy); letter-spacing:1px;
+  margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--gray-light); text-transform:uppercase; }
+.side-nav a{ display:block; padding:7px 10px; font-size:13px; color:var(--text-secondary);
+  border-radius:var(--radius-sm); border-left:3px solid transparent; transition:all .2s; text-decoration:none; line-height:1.4; }
+.side-nav a.active{ background:var(--navy); color:#fff; border-left-color:var(--gold); }
+.side-nav a:hover{ color:var(--navy); }
+/* 主内容避让侧栏（桌面） */
+@media(min-width:1200px){
+  .main-wrap{ max-width:1380px; margin:0 auto; padding:0 40px 0 248px; }
+}
+/* 移动端顶部进度条（<1200px 显示） */
+.top-progress{ position:sticky; top:0; z-index:45; height:4px; width:100%; display:none;
+  background:linear-gradient(90deg,var(--gold) var(--p,0%),var(--gray-light) 0); }
+
+/* P1-5 结论框语义分色（利好/风险/机会） */
+.conclusion-wrap.tone-risk{ background:var(--risk-bg); border-color:var(--risk-bd); }
+.conclusion-wrap.tone-opp { background:var(--opp-bg);  border-color:var(--opp-bd); }
+.conclusion-wrap.tone-info{ background:var(--info-bg); border-color:var(--info-bd); }
+.conclusion-wrap.tone-risk .ct{ color:var(--bad); }
+.conclusion-wrap.tone-opp  .ct{ color:var(--good); }
+.conclusion-wrap.tone-info .ct{ color:var(--info); }
+.cs.tone-risk{ border-left-color:var(--risk-bd); }
+.cs.tone-opp { border-left-color:var(--opp-bd); }
+.cs.tone-info{ border-left-color:var(--info-bd); }
+.cs.tone-risk .cl{ color:var(--bad); }
+.cs.tone-opp  .cl{ color:var(--good); }
+.cs.tone-info .cl{ color:var(--info); }
+
+/* P1-6 图表统一卡片头 + 加载骨架 */
+.chart-card{ background:var(--white); border:1px solid var(--gray-light); border-radius:var(--radius-md);
+  box-shadow:var(--shadow-sm); margin:22px 0; overflow:hidden; }
+.chart-head{ padding:12px 18px; font-size:15px; font-weight:700; color:var(--navy);
+  border-bottom:1px solid var(--gray-light); background:var(--off-white); }
+.chart-body{ position:relative; height:380px; padding:16px; }
+.chart-body canvas{ display:block; width:100% !important; height:100% !important; }
+.chart-skeleton{ position:absolute; inset:16px; border-radius:var(--radius-sm);
+  background:linear-gradient(90deg,#eef1f5 25%,#e2e7ee 37%,#eef1f5 63%);
+  background-size:400% 100%; animation:sk 1.4s ease infinite; }
+@keyframes sk{ 0%{background-position:100% 0} 100%{background-position:0 0} }
+.chart-body.ready .chart-skeleton{ display:none; }
+@media (max-width:1199px){ .side-nav{ display:none; } .top-progress{ display:block; } }
+@media (max-width:768px){ .chart-body{ height:300px; } }
+@media (max-width:480px){ .chart-body{ height:260px; } }
+
+/* ============================================================
+   P2 设计增强（字号已统一到 token / Hero 锚点 / 滚动渐入 / 图表配色对齐 / 深色模式）
+   全部为新增 class 与 [data-theme] 覆盖，默认亮色不变，向后兼容
+   ============================================================ */
+
+/* P2-3 滚动渐入微交互（默认可见；JS 加载后加 .reveal-init 隐藏，观察相交再加 .in-view。无 JS / 无 IO 时保持可见，不降级） */
+.step-card{ transition: opacity .55s ease, transform .55s ease; }
+.step-card.reveal-init{ opacity:0; transform:translateY(14px); }
+.step-card.in-view{ opacity:1; transform:none; }
+
+/* P2-5 主题切换按钮（右上角固定，不挡阅读） */
+.theme-toggle{ position:fixed; top:18px; right:18px; z-index:60;
+  width:42px; height:42px; border-radius:50%; border:1px solid var(--gray-light);
+  background:var(--white); color:var(--navy); cursor:pointer; font-size:18px; line-height:1;
+  box-shadow:var(--shadow-sm); display:flex; align-items:center; justify-content:center;
+  transition:all .2s; }
+.theme-toggle:hover{ border-color:var(--gold); transform:scale(1.06); }
+@media print{ .theme-toggle{ display:none !important; } }
+
+/* P2-5 深色模式 token 覆盖（默认亮色不变；<html data-theme="dark"> 时启用） */
+[data-theme="dark"]{
+  --navy:#0b1220; --navy-mid:#16233a;
+  --white:#0f1722; --off-white:#0c121b;
+  --gray-light:#243042; --gray-border:#33415a;
+  --text:#e6ebf2; --text-secondary:#9aa7b8;
+  --shadow-sm:0 2px 8px rgba(0,0,0,0.3); --shadow-md:0 4px 16px rgba(0,0,0,0.4); --shadow-lg:0 8px 32px rgba(0,0,0,0.5);
+  --risk-bg:#2a1717; --risk-bd:#e05a5a;
+  --opp-bg:#13251a; --opp-bd:#3fae6a;
+  --info-bg:#13203a; --info-bd:#4f8fe0;
+  --chart-1:#5b9bf0; --chart-2:#3fae6a; --chart-3:#e05a5a; --chart-4:#d9ad5c; --chart-5:#7aa6f5; --chart-6:#3fae6a;
+  --tier-online:#a98fd6;
+}
+[data-theme="dark"] body{ background:var(--off-white); }
+/* 深色下浅色卡片/框收敛为深色，保持对比与层次 */
+[data-theme="dark"] .exec-summary,
+[data-theme="dark"] .step-wrap,
+[data-theme="dark"] .appendix,
+[data-theme="dark"] .toc-card,
+[data-theme="dark"] .side-nav,
+[data-theme="dark"] .appendix-wrap,
+[data-theme="dark"] .kpi-card,
+[data-theme="dark"] .chart-card,
+[data-theme="dark"] .chart-head,
+[data-theme="dark"] .source-box{ background:var(--white); border-color:var(--gray-border); }
+[data-theme="dark"] .conclusion-wrap{ background:#1a160c; border-color:var(--risk-bd); }
+[data-theme="dark"] .warning-box{ background:#1d1606; border-color:var(--gold); color:#cbb277; }
+[data-theme="dark"] .warning-box strong{ color:#d9ad5c; }
+[data-theme="dark"] .step-body tbody tr:nth-child(even) td{ background:var(--off-white); }
+[data-theme="dark"] .step-body tbody tr:hover td{ background:#16233a; }
+[data-theme="dark"] .hero::before{ opacity:0.18; }
+[data-theme="dark"] .chart-skeleton{ background:linear-gradient(90deg,#1a2230 25%,#222c3d 37%,#1a2230 63%); }
+
+/* 打印强制亮色 + 渐入卡片可见（防深色打印发白/发暗 + 防未触发渐入致打印空白） */
+@media print{
+  .step-card{ opacity:1 !important; transform:none !important; }
+  :root, [data-theme="dark"]{
+    --white:#fff; --off-white:#fff; --text:#1a1a2e; --text-secondary:#4a5468;
+    --gray-light:#dde0e5; --gray-border:#c4c8ce; --navy:#0a1628; --navy-mid:#152238;
+  }
+  /* 深色模式打印：结论框/警示框强制亮底深字，避免黑块+深字不可见 */
+  [data-theme="dark"] .conclusion-wrap{ background:#fff !important; border-color:#c4c8ce !important; }
+  [data-theme="dark"] .conclusion-wrap .cs,
+  [data-theme="dark"] .conclusion-wrap .ctext,
+  [data-theme="dark"] .conclusion-wrap .ct,
+  [data-theme="dark"] .conclusion-wrap .cl{ color:#1a1a2e !important; }
+  [data-theme="dark"] .warning-box{ background:#fff8e6 !important; color:#5a4a1a !important; border-color:#d9ad5c !important; }
+  [data-theme="dark"] .warning-box strong{ color:#b8860b !important; }
+}
+
+</style>
+<script>try{var t=localStorage.getItem('ssfa-theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
+</head>
+<body>
+
+<button id="themeToggle" class="theme-toggle" aria-label="切换深色/亮色模式" title="切换深色模式">🌙</button>
+
+<!-- 图表加载失败提示（离线/缺 assets 时显示） -->
+<div id="chart-error" style="display:none;background:#fef3e2;border-bottom:1px solid #c8943b;color:#7a5d00;padding:12px 40px;font-size:13px;position:relative;z-index:50;"></div>
+<noscript><div style="background:#fef3e2;border-bottom:1px solid #c8943b;color:#7a5d00;padding:12px 40px;font-size:13px;">本报告图表需要启用 JavaScript 才能显示，请在浏览器中开启 JavaScript 后查看。</div></noscript>
+
+<!-- Hero -->
+<div class="hero"><div class="hero-content">
+<h1>{{COMPANY_NAME}} · 七步财报分析</h1>
+<div class="badge">{{STOCK_CODE}} · {{INDUSTRY}}</div>
+<p class="subtitle">基于"七步八问"财务分析法的全景式投资分析，覆盖 {{DATA_YEAR_RANGE}} 数据，九步深度拆解</p>
+<div class="meta-row">
+<div class="mt"><span class="mt-l">分析对象</span><span class="mt-v">{{COMPANY_NAME}}（{{STOCK_CODE}}）</span></div>
+<div class="mt"><span class="mt-l">分析期间</span><span class="mt-v">{{DATA_YEAR_DESC}}</span></div>
+<div class="mt"><span class="mt-l">方法论</span><span class="mt-v">七步八问分析法</span></div>
+<div class="mt"><span class="mt-l">报告日期</span><span class="mt-v">{{REPORT_DATE}}</span></div>
+</div></div></div>
+
+<!-- 侧面导航（桌面固定）+ 顶部进度条（移动端吸顶） -->
+<nav class="side-nav" aria-label="报告章节导航">
+  <div class="sn-title">报告章节</div>
+  <a href="#step1" onclick="document.getElementById('step1').scrollIntoView({behavior:'smooth'});return false;">第1步 · 看营收数据</a>
+  <a href="#step2" onclick="document.getElementById('step2').scrollIntoView({behavior:'smooth'});return false;">第2步 · 看成本费用</a>
+  <a href="#step3" onclick="document.getElementById('step3').scrollIntoView({behavior:'smooth'});return false;">第3步 · 看增长</a>
+  <a href="#step4" onclick="document.getElementById('step4').scrollIntoView({behavior:'smooth'});return false;">第4步 · 看业务构成</a>
+  <a href="#step5" onclick="document.getElementById('step5').scrollIntoView({behavior:'smooth'});return false;">第5步 · 看资产负债</a>
+  <a href="#step6" onclick="document.getElementById('step6').scrollIntoView({behavior:'smooth'});return false;">第6步 · 看投入产出</a>
+  <a href="#step7" onclick="document.getElementById('step7').scrollIntoView({behavior:'smooth'});return false;">第7步 · 看收益率</a>
+  <a href="#step8" onclick="document.getElementById('step8').scrollIntoView({behavior:'smooth'});return false;">第8步 · 八问商业模式</a>
+  <a href="#step9" onclick="document.getElementById('step9').scrollIntoView({behavior:'smooth'});return false;">第9步 · 同行对比</a>
+</nav>
+<div class="top-progress" id="topProgress"></div>
+
+<!-- TOC -->
+<div class="main-wrap"><div class="toc-card">
+<div class="toc-title">📑 报告导航 · 点击跳转</div>
+<div class="toc-grid">
+<div class="toc-item" onclick="document.getElementById('step1').scrollIntoView({behavior:'smooth'})"><span class="toc-num">01</span><div class="toc-l"><span class="t">第1步：看营收数据</span><span class="d">建立基本面轮廓，评估盈利质量</span></div></div>
+<div class="toc-item" onclick="document.getElementById('step2').scrollIntoView({behavior:'smooth'})"><span class="toc-num">02</span><div class="toc-l"><span class="t">第2步：看成本费用构成</span><span class="d">理解盈利结构，识别效率变化</span></div></div>
+<div class="toc-item" onclick="document.getElementById('step3').scrollIntoView({behavior:'smooth'})"><span class="toc-num">03</span><div class="toc-l"><span class="t">第3步：看增长</span><span class="d">把握核心趋势，评估未来潜力</span></div></div>
+<div class="toc-item" onclick="document.getElementById('step4').scrollIntoView({behavior:'smooth'})"><span class="toc-num">04</span><div class="toc-l"><span class="t">第4步：看业务构成</span><span class="d">拆解收入引擎，定位驱动力来源</span></div></div>
+<div class="toc-item" onclick="document.getElementById('step5').scrollIntoView({behavior:'smooth'})"><span class="toc-num">05</span><div class="toc-l"><span class="t">第5步：看资产负债</span><span class="d">评估资产效率和财务风险</span></div></div>
+<div class="toc-item" onclick="document.getElementById('step6').scrollIntoView({behavior:'smooth'})"><span class="toc-num">06</span><div class="toc-l"><span class="t">第6步：看投入产出</span><span class="d">理解商业模式本质</span></div></div>
+<div class="toc-item" onclick="document.getElementById('step7').scrollIntoView({behavior:'smooth'})"><span class="toc-num">07</span><div class="toc-l"><span class="t">第7步：看收益率</span><span class="d">综合评估股东回报和资产效率</span></div></div>
+<div class="toc-item" onclick="document.getElementById('step8').scrollIntoView({behavior:'smooth'})"><span class="toc-num">08</span><div class="toc-l"><span class="t">第8步：八问商业模式</span><span class="d">八维度审查，形成综合判断</span></div></div>
+<div class="toc-item" onclick="document.getElementById('step9').scrollIntoView({behavior:'smooth'})"><span class="toc-num">09</span><div class="toc-l"><span class="t">第9步：同行对比</span><span class="d">横向对标，识别估值吸引力</span></div></div>
+</div></div>
+
+<!-- 执行摘要 -->
+<div class="exec-summary">
+<h2>⚡ 执行摘要</h2>
+<div class="rating-badge {{RATING_CLASS}}">投资评级：{{INVESTMENT_RATING}}</div>
+{{DATA_SOURCE_BOX}}
+{{KPI_CARDS}}
+{{WARNING_BOX}}
+</div>
+
+<!-- 第1步 -->
+{{STEP1_CONTENT}}
+
+<!-- 第2步 -->
+<div class="page-break"></div>
+{{STEP2_CONTENT}}
+
+<!-- 第3步 -->
+<div class="page-break"></div>
+{{STEP3_CONTENT}}
+
+<!-- 第4步 -->
+<div class="page-break"></div>
+{{STEP4_CONTENT}}
+
+<!-- 第5步 -->
+<div class="page-break"></div>
+{{STEP5_CONTENT}}
+
+<!-- 第6步 -->
+<div class="page-break"></div>
+{{STEP6_CONTENT}}
+
+<!-- 第7步 -->
+<div class="page-break"></div>
+{{STEP7_CONTENT}}
+
+<!-- 第8步 -->
+<div class="page-break"></div>
+{{STEP8_CONTENT}}
+
+<!-- 第9步 -->
+<div class="page-break"></div>
+{{STEP9_CONTENT}}
+
+<!-- 附录 -->
+<div class="appendix-wrap" style="background:var(--white);border-radius:var(--radius-lg);padding:40px;box-shadow:var(--shadow-md);margin:50px 0;border:1px solid var(--gray-light);">
+  <h2 style="font-size:var(--fs-h2);font-weight:800;color:var(--navy);margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid var(--gold);">📋 附录</h2>
+{{APPENDIX_CONTENT}}
+</div>
+
+<div class="report-footer">
+    <p>报告生成时间：{{REPORT_DATE}} ｜ 分析方法：七步财报分析法 ｜ 数据来源：{{COMPANY_NAME}} {{DATA_YEAR_RANGE}} 财务数据</p>
+</div>
+
+</div>
+
+<!-- Chart.js 图表脚本 -->
+<script>
+/* ===== 图表渲染引导（容错 + 离线兜底） ===== */
+(function(){
+  function showChartError(msg){
+    var el=document.getElementById('chart-error');
+    if(el){ el.style.display='block'; if(msg) el.textContent=msg; }
+  }
+  window.__charts=[];
+  window.__ready=false;
+  function renderChart(id, config){
+    try{
+      var el=document.getElementById(id);
+      if(!el){ console.warn('图表容器缺失: '+id); return; }
+      var c=new Chart(el, config);
+      if(!window.__chartInstances) window.__chartInstances={};
+      window.__chartInstances[id]=c;
+      // P1-6 渲染成功后移除骨架
+      var cb = el.parentNode && el.parentNode.classList && el.parentNode.classList.contains('chart-body') ? el.parentNode : null;
+      if(cb) cb.classList.add('ready');
+    }catch(e){
+      console.error('图表渲染失败: '+id, e);
+      var box=document.getElementById(id);
+      if(box){ box.innerHTML='<div style="padding:24px;color:#b71c1c;font-size:13px;">⚠️ 该图表数据异常，未能渲染（'+(e&&e.message?e.message:'未知错误')+'）</div>'; }
+    }
+  }
+  window.__renderChart=renderChart;
+  window.__reg=function(id,cfg){ window.__charts.push([id,cfg]); if(window.__ready) renderChart(id,cfg); };
+  function boot(){
+    if(typeof Chart==='undefined'){
+      showChartError('⚠️ 图表库未加载：请确认本报告同目录存在 assets/ 文件夹（含 chart.umd.min.js 与 chartjs-plugin-datalabels.min.js），或联网后重新打开。');
+      return;
+    }
+    if(typeof ChartDataLabels!=='undefined'){ Chart.register(ChartDataLabels); }
+    Chart.defaults.font.family="'PingFang SC','Microsoft YaHei',sans-serif";
+    /* P2-5 图表轴色随主题（深色下浅色轴文字/网格，避免看不清） */
+    var __dark = document.documentElement.getAttribute('data-theme')==='dark';
+    Chart.defaults.color = __dark ? '#9aa7b8' : '#4a5468';
+    Chart.defaults.borderColor = __dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
+    if(Chart.defaults.scale) Chart.defaults.scale.grid.color = __dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
+    Chart.defaults.plugins.datalabels.color = __dark ? '#cdd6e3' : '#1a1a2e';
+    Chart.defaults.plugins.datalabels.font.size=11;
+    Chart.defaults.plugins.datalabels.anchor='end';
+    Chart.defaults.plugins.datalabels.clamp=true;
+    window.__years={{CHART_YEARS}};
+    window.__yearStart=window.__years[0];
+    window.__yearEnd=window.__years[window.__years.length-1];
+    window.__yearSpan=window.__yearStart+'-'+window.__yearEnd;
+    window.__yearSpanGrowth=window.__years[1]+'-'+window.__yearEnd;
+    /* P2-4 图表配色对齐 CSS token：去掉游离 purple，统一引用 --chart-1..6 */
+    function __cv(v){ try{ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#000'; }catch(e){ return '#000'; } }
+    window.__c={accent:__cv('--chart-1'),green:__cv('--chart-2'),red:__cv('--chart-3'),orange:__cv('--chart-4'),blue2:__cv('--chart-5'),teal:__cv('--chart-6')};
+    window.__ready=true;
+    window.__charts.forEach(function(x){ renderChart(x[0],x[1]); });
+  }
+  if(typeof Chart==='undefined'){
+    var pending=2, urls=['https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js','https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js'];
+    urls.forEach(function(src){
+      var sc=document.createElement('script'); sc.src=src;
+      sc.onload=function(){ if(--pending===0) boot(); };
+      sc.onerror=function(){ showChartError('⚠️ 图表库加载失败：本地 assets/ 缺失且 CDN 不可达，请联网或补回 assets/ 后重试。'); };
+      document.head.appendChild(sc);
+    });
+  } else { boot(); }
+})();
+</script>
+
+<script>window.__reg('chart1',{
+  type:'bar',
+  data:{labels:window.__years,datasets:[
+    {type:'bar',label:'营业收入（亿）',data:{{CHART1_DATA_REVENUE}},backgroundColor:window.__c.accent,yAxisID:'y'},
+    {type:'line',label:'归母净利润（亿）',data:{{CHART1_DATA_NET_PROFIT}},borderColor:window.__c.green,backgroundColor:window.__c.green,yAxisID:'y1',tension:0.3,pointRadius:4}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图1：营业收入与归母净利润趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
+    scales:{y:{type:'linear',position:'left',title:{display:true,text:'营业收入（亿）'}},
+      y1:{type:'linear',position:'right',title:{display:true,text:'归母净利润（亿）'},grid:{drawOnChartArea:false}}}
+  }
+});</script>
+
+<script>window.__reg('chart2',{
+  type:'line',
+  data:{labels:window.__years,datasets:[
+    {label:'经营净现金流/归母净利润',data:{{CHART2_DATA_CF_RATIO}},borderColor:window.__c.accent,tension:0.3,pointRadius:4},
+    {label:'扣非净利润/归母净利润',data:{{CHART2_DATA_DEDUCT_RATIO}},borderColor:window.__c.green,tension:0.3,pointRadius:4,yAxisID:'y1'}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图2：盈利质量四关系图（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
+    scales:{y:{title:{display:true,text:'经营净现金流/归母净利润'}},
+      y1:{position:'right',title:{display:true,text:'扣非净利润/归母净利润'},grid:{drawOnChartArea:false},min:0,max:1.1}}
+  }
+});</script>
+
+<script>window.__reg('chart3',{
+  type:'line',
+  data:{labels:window.__years,datasets:[
+    {label:'毛利率',data:{{CHART3_DATA_GROSS_MARGIN}},borderColor:window.__c.accent,tension:0.3,pointRadius:4,yAxisID:'y'},
+    {label:'净利率',data:{{CHART3_DATA_NET_MARGIN}},borderColor:window.__c.green,tension:0.3,pointRadius:4,yAxisID:'y1'}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图3：毛利率与净利率趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
+    scales:{y:{type:'linear',position:'left',title:{display:true,text:'毛利率（%）'},ticks:{callback:v=>v+'%'}},
+      y1:{type:'linear',position:'right',title:{display:true,text:'净利率（%）'},grid:{drawOnChartArea:false},ticks:{callback:v=>v+'%'}}}
+  }
+});</script>
+
+<script>window.__reg('chart4',{
+  type:'line',
+  data:{labels:window.__years,datasets:[
+    {label:'研发费用率',data:{{CHART4_DATA_RD_RATIO}},borderColor:window.__c.accent,tension:0.3,pointRadius:4},
+    {label:'管理费用率',data:{{CHART4_DATA_ADMIN_RATIO}},borderColor:window.__c.orange,tension:0.3,pointRadius:4},
+    {label:'销售费用率',data:{{CHART4_DATA_SALES_RATIO}},borderColor:window.__c.blue2,tension:0.3,pointRadius:4}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图4：期间费用率趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
+    scales:{y:{title:{display:true,text:'费用率（%）'},ticks:{callback:v=>v+'%'}}}
+  }
+});</script>
+
+<script>window.__reg('chart5',{
+  type:'bar',
+  data:{labels:window.__years.slice(1),datasets:[
+    {label:'营收增长率（%）',data:{{CHART5_DATA_REV_GROWTH}},backgroundColor:window.__c.accent},
+    {label:'归母净利润增长率（%）',data:{{CHART5_DATA_NET_PROFIT_GROWTH}},backgroundColor:window.__c.green}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图5：营收与归母净利润增长率（'+window.__yearSpanGrowth+'）',font:{size:16}},datalabels:{display:false}},
+    scales:{y:{title:{display:true,text:'增长率（%）'},ticks:{callback:v=>v+'%'}}}
+  }
+});</script>
+
+<script>window.__reg('chart6',{
+  type:'bar',
+  data:{labels:['营业收入CAGR','归母净利润CAGR'],datasets:[
+    {label:'历史CAGR（'+window.__yearSpan+'）',data:{{CHART6_DATA_HIST_CAGR}},backgroundColor:window.__c.accent},
+    {label:'预期CAGR（2026E-2028E）',data:{{CHART6_DATA_EXP_CAGR}},backgroundColor:window.__c.green}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图6：历史CAGR vs 预期CAGR对比',font:{size:16}},datalabels:{display:true,formatter:v=>v.toFixed(1)+'%',anchor:'end',align:'top',offset:6,font:{size:12,weight:'bold'},color:'#1a1a2e'}},
+    scales:{y:{ticks:{callback:v=>v+'%'}}}
+  }
+});</script>
+
+<script>window.__reg('chart7',(function(){
+  var names={{BUSINESS_SEGMENT_NAMES}};
+  var series={{CHART7_DATA_SEGMENTS}};
+  var pal=[['rgba(30,95,180,0.5)','#1e5fb4'],['rgba(183,28,28,0.3)','#b71c1c'],['rgba(200,148,59,0.4)','#c8943b'],['rgba(91,139,239,0.4)',window.__c.blue2],['rgba(46,139,87,0.4)','#2e8b57'],['rgba(70,130,180,0.4)','#4682b4']];
+  var ds=names.map(function(nm,i){var c=pal[i%pal.length];return {label:nm+'占比',data:series[i]||[],backgroundColor:c[0],borderColor:c[1],fill:true,tension:0.3};});
+  return {type:'line',data:{labels:window.__years,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:false,text:'图7：收入结构变化趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:true,formatter:function(v,ctx){var stack=ctx.chart.data.datasets.reduce(function(s,ds,i){return s+(ds.data[ctx.dataIndex]||0);},0);return stack>0?v.toFixed(1)+'%':'';},anchor:'center',align:'center',color:'#fff',font:{size:11,weight:'bold'},textStrokeColor:'rgba(0,0,0,0.3)',textStrokeWidth:2}},scales:{y:{stacked:true,title:{display:true,text:'占比（%）'},ticks:{callback:v=>v+'%'},max:100}}}};
+})());</script>
+
+<script>window.__reg('chart8',(function(){
+  var names={{BUSINESS_SEGMENT_NAMES}};
+  var series={{CHART8_DATA_SEGMENTS}};
+  var pal=['#1e5fb4','#b71c1c','#c8943b',window.__c.blue2,'#2e8b57','#4682b4'];
+  var ds=names.map(function(nm,i){return {label:nm+'毛利率（%）',data:series[i]||[],borderColor:pal[i%pal.length],backgroundColor:'rgba(30,95,180,0.1)',fill:true,tension:0.3,pointRadius:5};});
+  return {type:'line',data:{labels:window.__years,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:false,text:'图8：分业务板块毛利率趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},scales:{y:{ticks:{callback:v=>v+'%'}}}}};
+})());</script>
+
+<script>window.__reg('chart9',{
+  type:'bar',
+  data:{labels:window.__years,datasets:[
+    {label:'流动资产（亿）',data:{{CHART9_DATA_CURRENT_ASSETS}},backgroundColor:window.__c.accent,stack:'a'},
+    {label:'非流动资产（亿）',data:{{CHART9_DATA_NON_CURRENT_ASSETS}},backgroundColor:'#BDC3C7',stack:'a'}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图9：资产结构变化（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
+    scales:{y:{title:{display:true,text:'资产（亿）'}}}
+  }
+});</script>
+
+<script>window.__reg('chart10',{
+  type:'line',
+  data:{labels:window.__years,datasets:[
+    {label:'资产负债率（%）',data:{{CHART10_DATA_DEBT_RATIO}},borderColor:window.__c.red,backgroundColor:'rgba(183,28,28,0.1)',fill:true,tension:0.3,pointRadius:5}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图10：资产负债率趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:true,formatter:v=>v.toFixed(2)+'%',align:'end'}},
+    scales:{y:{ticks:{callback:v=>v+'%'}}}
+  }
+});</script>
+
+<script>window.__reg('chart11',{
+  type:'line',
+  data:{labels:window.__years,datasets:[
+    {label:'1元收入需要的WC',data:{{CHART11_DATA_WC_RATIO}},borderColor:window.__c.orange,tension:0.3,pointRadius:4}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图11：WC占收入比重趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
+    scales:{y:{title:{display:true,text:'WC/营业收入'}}}
+  }
+});</script>
+
+<script>window.__reg('chart12',{
+  type:'line',
+  data:{labels:window.__years,datasets:[
+    {label:'人均收入（万元）',data:{{CHART12_DATA_REV_PER_CAPITA}},borderColor:window.__c.accent,tension:0.3,pointRadius:4,yAxisID:'y'},
+    {label:'人均归母净利润（万元）',data:{{CHART12_DATA_PROFIT_PER_CAPITA}},borderColor:window.__c.green,tension:0.3,pointRadius:4,yAxisID:'y1'}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图12：人均收入与人均利润趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
+    scales:{y:{type:'linear',position:'left',title:{display:true,text:'人均收入（万元）'}},
+      y1:{type:'linear',position:'right',title:{display:true,text:'人均归母净利润（万元）'},grid:{drawOnChartArea:false}}}
+  }
+});</script>
+
+<script>window.__reg('chart13',{
+  type:'line',
+  data:{labels:window.__years,datasets:[
+    {label:'ROE',data:{{CHART13_DATA_ROE}},borderColor:window.__c.accent,tension:0.3,pointRadius:4},
+    {label:'ROA',data:{{CHART13_DATA_ROA}},borderColor:window.__c.green,tension:0.3,pointRadius:4},
+    {label:'ROIC',data:{{CHART13_DATA_ROIC}},borderColor:window.__c.blue2,tension:0.3,pointRadius:4}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图13：ROE/ROA/ROIC趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
+    scales:{y:{title:{display:true,text:'收益率（%）'},ticks:{callback:v=>v+'%'}}}
+  }
+});</script>
+
+<script>window.__reg('chart14',{
+  type:'bar',
+  data:{labels:['销售净利率','总资产周转率（次）','权益乘数'],datasets:[{label:'2025年',data:{{CHART14_DATA_DUPONT}},backgroundColor:[window.__c.accent,window.__c.green,window.__c.orange]}]},
+  options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
+    plugins:{title:{display:false,text:'图14：杜邦三因素拆解（'+window.__yearEnd+'年）',font:{size:16}},datalabels:{display:true,formatter:(v,i)=>[v+'%',v+'次',v+'x'][i]}}
+  }
+});</script>
+
+<script>window.__reg('chart15',{
+  type:'line',
+  data:{labels:window.__years,datasets:[
+    {label:'总资产周转天数',data:{{CHART15_DATA_TOTAL_ASSET_DAYS}},borderColor:window.__c.accent,tension:0.3},
+    {label:'存货周转天数',data:{{CHART15_DATA_INVENTORY_DAYS}},borderColor:window.__c.green,tension:0.3}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图15：资产周转天数趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
+    scales:{y:{title:{display:true,text:'周转天数（天）'}}}
+  }
+});</script>
+
+<script>window.__reg('chart16',{
+  type:'bar',
+  data:{labels:{{CHART16_DATA_PEER_NAMES}},datasets:[
+    {label:'毛利率（%）',data:{{CHART16_DATA_GROSS_MARGIN}},backgroundColor:window.__c.accent},
+    {label:'净利率（%）',data:{{CHART16_DATA_NET_MARGIN}},backgroundColor:window.__c.green},
+    {label:'资产负债率（%）',data:{{CHART16_DATA_DEBT_RATIO}},backgroundColor:window.__c.red}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图16：同行关键指标对比（'+window.__yearEnd+'年）',font:{size:16}},datalabels:{display:true,formatter:v=>v.toFixed(2)+'%'}},
+    scales:{y:{ticks:{callback:v=>v+'%'}}}
+  }
+});</script>
+
+<script>
+(function(){
+  /* 用大写字母+下划线开头的占位符才算未替换; 避免被 JS 字符串字面量或 CSS 里的 {{ 误报 */
+  if(/\{\{[A-Z_][A-Z0-9_]+\}\}/.test(document.documentElement.outerHTML)){
+    var b=document.getElementById('chart-error');
+    if(b){ b.style.display='block'; b.textContent='⚠️ 检测到未替换的占位符（如 {{...}}），报告可能不完整，请重新生成 HTML。'; }
+  }
+})();
+</script>
+
+<!-- P1-4 侧栏导航滚动高亮 + 移动端顶部进度条 -->
+<script>
+(function(){
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('.side-nav a'));
+  if(navLinks.length){
+    var setActive = function(id){
+      navLinks.forEach(function(a){ a.classList.toggle('active', a.getAttribute('href') === '#' + id); });
+    };
+    if('IntersectionObserver' in window){
+      var obs = new IntersectionObserver(function(es){
+        es.forEach(function(e){ if(e.isIntersecting) setActive(e.target.id); });
+      }, { rootMargin: '-20% 0px -70% 0px' });
+      document.querySelectorAll('section.step-card').forEach(function(s){ obs.observe(s); });
+    }
+  }
+  var prog = document.getElementById('topProgress');
+  if(prog){
+    var onScroll = function(){
+      var h = document.documentElement;
+      var denom = (h.scrollHeight - h.clientHeight) || 1;
+      var p = Math.max(0, Math.min(100, h.scrollTop / denom * 100));
+      prog.style.setProperty('--p', p.toFixed(1) + '%');
+    };
+    window.addEventListener('scroll', onScroll, {passive:true});
+    window.addEventListener('resize', onScroll, {passive:true});
+    onScroll();
+  }
+})();
+</script>
+
+<script>
+/* P2-3 滚动渐入：默认可见，支持 IO 时先隐藏再观察触发（无 IO 不降级） */
+(function(){
+  var cards=document.querySelectorAll('.step-card');
+  if(!cards.length || !('IntersectionObserver' in window)) return;
+  cards.forEach(function(c){ c.classList.add('reveal-init'); });
+  var ro=new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in-view'); ro.unobserve(e.target); } });
+  },{rootMargin:'0px 0px -10% 0px'});
+  cards.forEach(function(c){ ro.observe(c); });
+})();
+
+/* P2-补：侧栏 Hero 区智能隐藏（首屏不压标题） */
+(function(){
+  var nav=document.querySelector('.side-nav');
+  var hero=document.querySelector('.hero');
+  if(!nav || !hero) return;
+  // 初始判断：JS 加载时 Hero 仍在视口内，立即隐藏侧栏防闪烁
+  var r=hero.getBoundingClientRect();
+  if(r.bottom>0) nav.classList.add('nav-hidden');
+  if(!('IntersectionObserver' in window)) return;
+  // 顶部收缩 72px 作缓冲，避免 Hero 边沿的反复切换
+  var hio=new IntersectionObserver(function(es){
+    es.forEach(function(e){ nav.classList.toggle('nav-hidden', e.isIntersecting); });
+  },{threshold:0, rootMargin:'-72px 0px 0px 0px'});
+  hio.observe(hero);
+})();
+
+/* P2-5 深色模式切换：图标切换 + localStorage 持久化 + 图表轴色重绘 */
+(function(){
+  var btn=document.getElementById('themeToggle');
+  if(!btn) return;
+  function applyChartTheme(dark){
+    if(typeof Chart==='undefined') return;
+    Chart.defaults.color=dark?'#9aa7b8':'#4a5468';
+    Chart.defaults.borderColor=dark?'rgba(255,255,255,0.12)':'rgba(0,0,0,0.08)';
+    if(Chart.defaults.scale) Chart.defaults.scale.grid.color=dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.06)';
+    Chart.defaults.plugins.datalabels.color=dark?'#cdd6e3':'#1a1a2e';
+    if(window.__chartInstances){ for(var k in window.__chartInstances){ try{ window.__chartInstances[k].update('none'); }catch(e){} } }
+  }
+  btn.addEventListener('click',function(){
+    var html=document.documentElement;
+    var dark=html.getAttribute('data-theme')!=='dark';
+    html.setAttribute('data-theme', dark?'dark':'light');
+    try{ localStorage.setItem('ssfa-theme', dark?'dark':'light'); }catch(e){}
+    btn.textContent=dark?'☀️':'🌙';
+    applyChartTheme(dark);
+  });
+  btn.textContent=document.documentElement.getAttribute('data-theme')==='dark'?'☀️':'🌙';
+})();
+</script>
+
+</body>
+</html>
