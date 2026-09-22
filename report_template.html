@@ -790,6 +790,10 @@ body {
     window.__yearEnd=window.__years[window.__years.length-1];
     window.__yearSpan=window.__yearStart+'-'+window.__yearEnd;
     window.__yearSpanGrowth=window.__years[1]+'-'+window.__yearEnd;
+    /* P2-1 修复：预期CAGR 窗口改为动态注入，避免硬编码"2026E-2028E"与实际口径(如 2025A→2028E 三年)不符。
+       生成器可用占位符 {{EXP_SPAN}} 注入真实窗口；未注入时回退为不写死的通用表述，杜绝再次失真。 */
+    var __es='{{EXP_SPAN}}';
+    window.__expSpan=(__es && __es.indexOf('{{')<0) ? __es : '最新A→E3三年复合';
     /* P2-4 图表配色对齐 CSS token：去掉游离 purple，统一引用 --chart-1..6 */
     function __cv(v){ try{ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#000'; }catch(e){ return '#000'; } }
     window.__c={accent:__cv('--chart-1'),green:__cv('--chart-2'),red:__cv('--chart-3'),orange:__cv('--chart-4'),blue2:__cv('--chart-5'),teal:__cv('--chart-6')};
@@ -876,7 +880,7 @@ body {
   type:'bar',
   data:{labels:['营业收入CAGR','归母净利润CAGR'],datasets:[
     {label:'历史CAGR（'+window.__yearSpan+'）',data:{{CHART6_DATA_HIST_CAGR}},backgroundColor:window.__c.accent},
-    {label:'预期CAGR（2026E-2028E）',data:{{CHART6_DATA_EXP_CAGR}},backgroundColor:window.__c.green}
+    {label:'预期CAGR（'+window.__expSpan+'）',data:{{CHART6_DATA_EXP_CAGR}},backgroundColor:window.__c.green}
   ]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{title:{display:false,text:'图6：历史CAGR vs 预期CAGR对比',font:{size:16}},datalabels:{display:true,formatter:v=>v.toFixed(1)+'%',anchor:'end',align:'top',offset:6,font:{size:12,weight:'bold'},color:'#1a1a2e'}},

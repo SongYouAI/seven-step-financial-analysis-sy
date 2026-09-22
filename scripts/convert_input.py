@@ -43,7 +43,13 @@ def read_sheet(path):
         return [[ws.cell_value(r, c) for c in range(ws.ncols)] for r in range(ws.nrows)]
     if low.endswith('.csv'):
         with open(path, encoding='utf-8-sig') as f:
-            return [list(r) for r in csv.reader(f)]
+            raw = [list(r) for r in csv.reader(f)]
+        # 理杏仁(lixinger)导出值带前导 '=' (如 =981400 / ="600436")，去除后还原为数值/文本
+        for row in raw:
+            for i, c in enumerate(row):
+                if isinstance(c, str) and c.startswith('='):
+                    row[i] = c[1:].strip()
+        return raw
     sys.exit(f"❌ 不支持的文件类型: {path}")
 
 
@@ -60,7 +66,7 @@ def norm_year(cell):
     is_half = bool(re.search(r'06[-/]30|半年度|中报|半年报|H1|Q2|9月30|09[-/]30|第三季度', s))
     if is_half:
         return None
-    m = re.search(r'(\d{4})', s)
+    m = re.search(r'(\d{4})(?:[-/年]|$)', s)
     if not m:
         return None
     return f"{m.group(1)}年年报"

@@ -19,6 +19,9 @@ forecast_input.csv 列 (机构级离散度明细, 一行=一机构一年预测):
 口径处理:
   - EPS 列强制标注同源(聚合源), 与年报基本 EPS 差异单列说明, 避免误读 15.82 vs 16.14;
   - E3(如 2028E) 机构数=0 标注"外推非共识, 仅作趋势参考"。
+  - 【v3.1 主源优先】口径标注含"权威主源"的行(东财/同花顺一致预期聚合)为共识唯一真相源,
+    单券商行一律降级为"离散度旁证", 不参与 consensus 均值 —— 修复"25家聚合与单券商等权"失真。
+  - 【v3.1 新鲜度闸门】主源 来源日期 距今 > 30 天 → 强警告并提示重新联网取数。
 零回归: 不改动核心; 前瞻块为选择性增强伴侣文件。
 """
 import csv
@@ -27,6 +30,38 @@ import os
 import re
 import json
 from collections import defaultdict
+
+
+# 权威主源标记: 口径标注含此标记 = 东财/同花顺一致预期聚合(共识唯一真相源);
+# 其余(单券商)仅作离散度旁证, 不参与 consensus 均值, 避免等权失真。
+PRIMARY_MARK = '权威主源'
+FRESH_DAYS = 30
+
+
+def split_primary(rows):
+    """分为 (权威主源行, 旁证行)。主源缺失时返回空主源, 由调用方回退全量。"""
+    pri = [r for r in rows if PRIMARY_MARK in (r.get('口径标注') or '')]
+    wit = [r for r in rows if PRIMARY_MARK not in (r.get('口径标注') or '')]
+    return pri, wit
+
+
+def stale_rows(rows, days=FRESH_DAYS):
+    """返回 [(机构, 来源日期, 距今天数)] —— 超 days 天的行, 用于新鲜度闸门。"""
+    from datetime import datetime
+    today = datetime.now()
+    out = []
+    for r in rows:
+        d = (r.get('来源日期') or '').strip()
+        if not d:
+            continue
+        try:
+            dt = datetime.strptime(d, '%Y-%m-%d')
+        except ValueError:
+            continue
+        n = (today - dt).days
+        if n > days:
+            out.append((r.get('机构', '').strip(), d, n))
+    return out
 
 
 # ---------------------------------------------------------------------
@@ -117,13 +152,17 @@ def build_discrete(rows):
     return out
 
 
-def build_report_md(rows, consensus, e_order, latest):
+def build_report_md(rows, consensus, e_order, latest, src_note='', agg_note=''):
     yr_inst = defaultdict(set)
     for r in rows:
         yr_inst[r['年份'].strip()].add(r['机构'].strip())
     lines = []
     lines.append('## 一致预期（前瞻）\n')
     lines.append(f'- 覆盖机构数: {len({r["机构"].strip() for r in rows})}')
+    if src_note:
+        lines.append(f'- 数据来源构成: {src_note}')
+    if agg_note:
+        lines.append(f'- 聚合口径: {agg_note}')
     lines.append(f'- 预测年份: {", ".join(e_order) if e_order else "无"}')
     lines.append(f'- 最新实际营收: {latest.get("营收","-")} 元; 最新实际归母净利: {latest.get("净利","-")} 元')
     lines.append('- EPS 口径: 一致预期 EPS 为聚合源口径，与年报基本 EPS 可能存在差异（本数据未含年报基本EPS），引用时须注明口径，勿混用。')
@@ -187,9 +226,27 @@ def main():
         print(f"  ⚠️  离散度存在 {len(bad)} 行机构名缺失/模糊(禁止'某券商'), 已跳过: {[b.get('机构','') for b in bad][:5]}")
         rows = [r for r in rows if r.get('机构', '').strip() and '某券商' not in r.get('机构', '') and '某机构' not in r.get('机构', '')]
     latest = _latest_from_output(output_csv)
-    consensus, e_order = build_consensus(rows, latest)
-    discrete = build_discrete(rows)
-    md = build_report_md(rows, consensus, e_order, latest)
+    # 【主源优先】权威主源(东财/同花顺一致预期聚合) = 共识唯一真相源; 单券商仅作离散度旁证
+    pri, wit = split_primary(rows)
+    n_pri = len({r['机构'].strip() for r in pri})
+    n_wit = len({r['机构'].strip() for r in wit})
+    if pri:
+        agg_rows = pri
+        src_note = f'权威主源 {n_pri} 个 / 单券商旁证 {n_wit} 家'
+        agg_note = (f'权威主源优先 —— consensus 仅取主源聚合值, '
+                    f'{n_wit} 家单券商仅入离散度、不参与均值(避免"多机构聚合 vs 单券商"等权失真)')
+    else:
+        agg_rows = rows
+        src_note = f'⚠️ 无权威主源, 全部 {len({r["机构"].strip() for r in rows})} 家参与均值'
+        agg_note = '⚠️ 未标记权威主源, 回退为全部行简单均值(口径较弱, 建议补东财/同花顺一致预期作主源)'
+    # 【新鲜度闸门】主源超 FRESH_DAYS 天 → 强警告, 提示重新联网取数
+    stale = stale_rows(agg_rows)
+    if stale:
+        print(f"  ⚠️  新鲜度告警: {len(stale)} 行主源距今 > {FRESH_DAYS} 天, 请重新联网取数: {stale[:3]}")
+        agg_note += f'; ⚠️ 新鲜度告警: {len(stale)} 行超 {FRESH_DAYS} 天未更新'
+    consensus, e_order = build_consensus(agg_rows, latest)
+    discrete = build_discrete(rows)  # 离散度保留全部(含单券商旁证)
+    md = build_report_md(rows, consensus, e_order, latest, src_note, agg_note)
 
     os.makedirs(out_dir, exist_ok=True)
     p1 = os.path.join(out_dir, 'forecast_consensus.csv')
