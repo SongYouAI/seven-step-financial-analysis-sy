@@ -169,6 +169,25 @@ def check_r7(step_blocks):
     return issues
 
 
+def check_r8(text):
+    """R8 百分比量纲：|x| > 1000% 视为量纲错误。
+
+    实战事故：output.csv 的「自由现金流FCF」是绝对元值(-262770081)，被直接当比率
+    送进 pct_str() 渲染成「-26277008100.00%」，R1-R7 全部漏检。
+    凡「XX/归母」「XX/营收」类比率，必须确认分子分母同为可比口径。
+    """
+    issues = []
+    for m in re.finditer(r'(-?\d[\d,]*\.?\d*)\s*%', text):
+        try:
+            v = float(m.group(1).replace(',', ''))
+        except ValueError:
+            continue
+        if abs(v) > 1000:
+            issues.append(('全报告', '百分比量纲可疑',
+                           f'{m.group(0)} 超过 1000%，多因「绝对元值未除分母」被当成比率'))
+    return issues
+
+
 def run_on_text(text):
     blocks = split_steps(text)
     terms = load_terms()
@@ -180,6 +199,7 @@ def run_on_text(text):
         'R5': check_r5(blocks),
         'R6': check_r6(text, blocks),
         'R7': check_r7(blocks),
+        'R8': check_r8(text),
     }
     return results, blocks
 
@@ -188,6 +208,7 @@ def report(results, strict=False):
     rule_names = {
         'R1': '算式覆盖', 'R2': '标尺引用', 'R3': '术语裸奔',
         'R4': '结论空降', 'R5': '咬合缺失', 'R6': '数值自洽', 'R7': '反面假设',
+        'R8': '百分比量纲',
     }
     sev = {k: ('阻断' if k in BLOCK_RULES else '警告') for k in rule_names}
     print('=' * 60)
@@ -195,7 +216,7 @@ def report(results, strict=False):
     print('=' * 60)
     total_block = 0
     total_warn = 0
-    for r in ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7']:
+    for r in ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8']:
         items = results[r]
         if not items:
             print(f'  [✓] {r} {rule_names[r]} ({sev[r]}): 通过')
