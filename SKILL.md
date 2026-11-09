@@ -2,12 +2,12 @@
 name: seven-step-financial-analysis
 slug: seven-step-financial-analysis-sy
 displayName: 七步财报分析
-version: 2.1.0
+version: 2.1.1
 author: 松幽（公众号「松幽舒苑」· 视频号「松幽Ai提效」）
 description: 基于《简明财务分析》"七步法"的升级版财报分析skill。内置指标生成引擎（scripts/ 15 个 Python 脚本）与 HYDRO PAPER 暖纸底报告皮肤（三层 CSS + 数据驱动渲染器 + HTML 交付门禁 + 作者溯源二维码页脚），无需额外安装依赖即可运行。严格按规范文件执行每步分析，生成独立Markdown报告+最终HTML（默认 HYDRO PAPER 皮肤，可回退深蓝金棕）+PDF双份成品报告。覆盖营收、成本、增长、业务构成、资产负债、投入产出、收益率、商业模式八问、同行对比九大环节。每步按规范要求的数据抽取和分析总结格式执行。支持三种数据来源：本地CSV、内置零依赖在线拉数（A股/港股/美股均由 build_online_puller.py 直连东财 datacenter，见§1.12/§1.13；A股可另选 westock-mcp 等外部源交叉验证）、手动输入；启动自动依赖自检并引导安装缺失数据源（见§1.0），无CSV时亦可闭环产出报告（见§1.1.1 ONLINE档）。分析前先经 Phase 0 指标生成（调用内置 scripts/ 引擎产出 output.csv 标准化指标表，见§1.11），七步分析统一读 output.csv，单入口闭环。
 ---
 
-# 七步财报分析法 Skill（v2.1.0 · 笔记风格 + HYDRO PAPER 皮肤版）
+# 七步财报分析法 Skill（v2.1.1 · 笔记风格 + HYDRO PAPER 皮肤版）
 
 > 基于饶钢《简明财务分析》提出的"七步法"，专为二级市场投资者设计。数据来源支持本地CSV / **三市场内置零依赖在线拉数**（A股 / 港股 / 美股统一走 build_online_puller.py 直连东财 datacenter；A股可另选外部 MCP 交叉验证） / 手动输入三种方式，无本地CSV时亦可经用户授权联网或MCP拉三张表闭环产出（见§1.0前置依赖自检 与 §1.1.1 ONLINE档、§1.12 港美股拉数、§1.13 A股 ONLINE）。分析前先经 **Phase 0 指标生成**（调用内置 `scripts/` 引擎，把任意来源的财务数据组装成三张原始表 → 产出 `output.csv` 标准化指标表 + 辅助CSV，见§1.11），七步分析统一读 `output.csv` 与 Phase 0 辅助CSV，单入口闭环。使用预定义HTML模板（`report_template.html`）进行占位符填充，确保输出报告CSS一致、图表可用。启动自动依赖自检并引导安装缺失数据源（见§1.0），按资料丰度自适应验证（见§1.1.1），异常点强制✅闭环。
 
@@ -1369,6 +1369,7 @@ v6.1 的 ONLINE 落 `online_cache.csv` 单文件，但方式A 读的是 3 个分
 | **v7.3** | **2026-09-23** | **内容质检新增 R8「百分比量纲」规则（`|x|>1000%` 判为量纲错误）+ 新增经验#22（交付前必跑 `validate_content.py`，含 R1–R8 规则表与修警告姿势）；源自「自由现金流FCF」绝对元值被当比率渲染成 `-26277008100.00%` 而 R1–R7 全部漏检的事故。 |
 | **v7.2** | **2026-09-22** | **前瞻一致预期取数铁律 + 主源优先聚合（与 dynamic-valuation 同源事故修复）：① 新增 §1.11-b「前瞻一致预期取数铁律」P0 —— 必须本轮联网取数、禁止复用旧 `forecast_input.csv`/`forecast_consensus.csv`、**必须取东财「当前预测」而非「上一个月预测」**（实测片仔癀 FY3：当前 28.57亿/7家 vs 上一个月 31.13亿/4家，差约9%）、取数留痕（来源+日期+覆盖机构家数）与 `EPS×总股本≈归母净利` 复核；② `build_forecast.py` v3.1 **主源优先聚合**——`口径标注` 含「权威主源」的行才是共识唯一真相源，单券商行降级为「离散度旁证」仅入 `forecast_discrete.csv`、**不参与 `forecast_consensus.csv` 均值**（修复原「多机构聚合 vs 单券商等权」失真）；主源 `来源日期` >30天 触发**新鲜度告警**；③ 模板 `report_template.html` 图6「预期CAGR」窗口由硬编码 `2026E-2028E` 改为动态 `{{EXP_SPAN}}`（未注入时回退通用表述，不再写死年份），与实际 `最新A→E3 三年复合` 口径一致** |
 | **v7.0** | **2026-08-03** | **报告叙事层改版（笔记风格）：① 结论模板全面从「一问·二算·三标·四链·五用」机械框架改为老板原始笔记行文——动词式标题「第X步：看XXX（意义：XXX）」+「目的→数据抽取→做什么/为什么/怎么看→告诉普通投资者」自然结构；② 每步保留数据抽取表格、图表嵌入（16图）与异常点闭环，图表数据仍走 `build_report_data.py` 自动生成；③ 判断"优/良/警戒"改为大白话说明依据，反面可能「也可能是…」保留为写作要求；④ 术语词典/反面假设清单/阈值标尺库保留为 references 写作弹药（内部使用），不再以强制标签呈现给读者；⑤ 保留商店版全部视觉化图表与深蓝金棕 CSS（v6.3 模板资产）** |
+| **v2.1.1** | **2026-11-09** | **页脚层级 P0 修复（v2.1.0 移植时漏掉的 DOM 契约）**：老板截图反馈「最下方二维码区块跑到页面中间」。实测三档视口：七步 v2.1.0 成品 `.brand-block` 相对正文卡片右移 48px（1060）/ 248px（1440、1600），八维长江电力模板偏移 0。**根因：只搬了八维 brand CSS，没搬 DOM 层级**—— 八维 `<footer>` 是 `<body>` 直接子元素，七步 `render_report.py` 却把 `render_brand_footer()` 随 `build_appendix()` 塞进 `.main-wrap`；`.main-wrap` 与 `.report-footer` 各自带 `padding-left:48px`（≥1200px 时 248px，给固定侧栏让位），嵌套即双重偏移。① `render_report.py`：`build_appendix()` 只返回附录 step-card，footer 由 `build()` 挂在 `</div.main-wrap>` 之后，与八维模板一致；② `check_html.py` 新增 **P0-10**（`footer_inside_main_wrap()` 栈解析：footer 不得嵌在 `.main-wrap` 内），负向用例旧成品命中、正向用例八维模板与构造样例均放行；③ §19.5 / §19.5.1 补 DOM 契约与坐标验收标准。回归：三档视口 `brand x − appendix x = 0`、三模式 A/B/C `P0=0/P1=0`、二维码 2 张、远程资源 0。**属 skill bug，与 content.json / 生成参数无关，所有 v2.1.0 报告均受影响。** |
 | **v2.1.0** | **2026-11-09** | **作者溯源二维码 brand 页脚沉淀**：按长江电力八维报告末尾区块、模仿八维 skill 实现。① 新增 `assets/brand.json`（公众号「松幽舒苑」/ 视频号「松幽AI」+ 两张二维码 base64；`title`/`method` 改七步署名；**移除两个远程 OSS URL**）、`assets/qr-wechat.png` / `qr-video.png` 源图；② `sevenstep-adapt.css` 追加八维 HYDRO PAPER v3.2.2 页脚 CSS；③ `render_report.py` 新增 `load_brand()` / `qr_data_uri()` / `render_brand_footer()` / `QR_LIGHTBOX_JS`，**brand 区块强制输出**（content.json 不可关闭）、旧 `footer_html` 不重复渲染、base64 字符集校验；④ `check_html.py` 新增 **P0-9**（brand-block / lightbox / 2 按钮 / 2 data URI / 渠道标识），负向用例删标记即阻断；⑤ `capture.py` 新增 `--section footer` 并纳入 `--all`。与八维差异：七步 P0-3 禁远程，故**不支持 `branding.url`**。回归：三模式 A/B/C 均 `P0=0/P1=0`、二维码 2 张、远程资源 0、20 段 JS PASS；真实浏览器验证两码加载（556×550 / 598×550）、点击放大 + ESC 关闭；页脚截图目视整洁无重叠。** |
 | **v2.0.2** | **2026-11-09** | **A股 ONLINE 内置拉数 + 图16 残留占位符 P0 修复**：① `build_online_puller.py` 新增 A股分支（东财 `RPT_F10_FINANCE_G*` 宽表英文列 → `A_FIELD_MAP` 58 科目、多候选回退、`normalize_a_code` 补交易所后缀、`REPORT_TYPE=年报` + `12-31` 双重期次隔离、`SECURITY_NAME_ABBR` 命名、`_meta.json` 登记 `missing_cells`、核心科目硬校验）；`orchestrate.py` 新增 `--online-a/--years` 模块 -1，无本地 CSV 也能跑到最终 HTML。② 补跑 ONLINE 完整闭环时发现**图16 缺 `peer_comparison.csv` 会残留 4 个 `{{CHART16_*}}`**，触发 P0-1 + 内联 JS 语法错误、orchestrate EXIT=1；修为写空数组 → 空图提示卡机制接管（提示卡文案按图号区分），`EMPTY_DATA_PATTERNS` 两侧同步补 `labels:[]`。回归：A股三表 10 年（2016–2025）资产平衡 10/10、强校验全绿、`orchestrate --online-a` 完整闭环 EXIT=0、`check_html.py --strict-p1` **P0=0/P1=0**、19 段 JS PASS、空图提示 4/4；负向（删 chart16 提示卡）P0-8 精确阻断、正向（补 peer）自动注入 4 家同行；反例 3 类均 EXIT=1 且 0 空表；港股 00700.HK 零回归。**数据口径差异如实登记在 §1.13，不凑零差异**。** |
 | **v2.0.1** | **2026-11-09** | **端到端回归补测 + 静默空图 P0 修复**：补跑文档推荐的默认主路径「模式 B（content.json + prefilled）」时发现，缺 `segment_revenue.csv` / `headcount` 辅助表时 `build_report_data.py` 会写 `names=[]` / `series=[]` / `data:[]`，Chart.js 仍画出一套空坐标轴，报告交付出去就是 FIG.07 / FIG.08 / FIG.12 三张空白图，而 §19.6 只写了「须标注未披露」却无代码落地。修复（不编造、不插值）：`render_report.py` 新增 `empty_chart_ids()` / `mark_empty_charts()`，空图自动替换为「FIG.NN · 未披露 / 本图数据未取得」提示卡，canvas 置 `hidden` 以维持 16 canvas ↔ 16 `__reg` 契约；`sevenstep-adapt.css` 补提示卡样式；`check_html.py` 新增 **P0-8 静默空图阻断**并做负向用例验证（删掉一张提示卡即 P0=1）。回归：模式 A/B/C 三条路径均通，严格门禁 P0=0/P1=0、16/16 图真实渲染、12 张截图目视通过。** |
@@ -1445,10 +1446,11 @@ python3 "$SK/capture.py" 报告.html --all --outdir ./shots
 `check_html.py` 的 P0：残留占位符、16 canvas ↔ 16 `__reg`、远程资源/CDN、三层皮肤在位、
 内联 JS `node --check`、标签配平、9 步 + 附录 + 免责声明、**P0-8 静默空图**（`names=[]` /
 `series=[]` / `data:[]` / `labels:[]` 的图必须带 `data-chart="chartN"` 的 `.chart-empty-note` 提示卡）、
-**P0-9 作者溯源 brand 区块**（公众号 + 视频号二维码，见 §19.5.1）。
+**P0-9 作者溯源 brand 区块**（公众号 + 视频号二维码，见 §19.5.1）、
+**P0-10 页脚层级**（`footer.report-footer` 必须是 `<body>` 直接子元素，见 §19.5.1）。
 P1：emoji / Markdown 残留、图表卡与表格滚动容器覆盖、Hero 数据截止时点、本地 `assets/`。
 
-### 19.5.1 作者溯源 brand 区块（v2.1.0 · 强制输出）
+### 19.5.1 作者溯源 brand 区块（v2.1.1 · 强制输出）
 
 按桌面「长江电力 · 中国大水电 · 八维行业分析报告.html」末尾区块，模仿八维 skill 的
 `assets/brand.json` + `render_footer()` + P0-16，把公众号 / 视频号二维码沉淀到七步 skill。
@@ -1461,6 +1463,7 @@ P1：emoji / Markdown 残留、图表卡与表格滚动容器覆盖、Hero 数�
 | 生成器 | `render_report.py` 的 `load_brand()` / `qr_data_uri()` / `render_brand_footer()` / `QR_LIGHTBOX_JS` |
 | 门禁 | `check_html.py` **P0-9**：brand-block / qrLightbox / 2 个按钮 / 2 张 data URI / 公众号+视频号标识 |
 | 截图 | `capture.py --section footer`（已加入 `--all`） |
+| DOM 契约 | `<footer class="report-footer">` 必须是 `<body>` 直接子元素，**不得**嵌在 `.main-wrap` 内；由 `render_report.py` 的 `build()` 在 `</div.main-wrap>` 之后单独输出，`check_html.py` **P0-10** 反向阻断 |
 
 - **强制输出**：页脚是报告被多级转发后唯一稳定的出处锚点，`content.json` 不能关闭或覆盖。
   `--from-html` 从旧成品抽出的 `footer_html` 单行署名不再重复渲染；自定义且不含
@@ -1469,6 +1472,7 @@ P1：emoji / Markdown 残留、图表卡与表格滚动容器覆盖、Hero 数�
   与八维版差异：八维允许 `branding.url` 追加远程链接，七步**不提供**（会与 P0-3 直接冲突）。
 - **离线 / SkillHub 友好**：base64 放在纯文本 JSON 里，分发渠道拒收 PNG 也不丢图；
   `qr_data_uri()` 会校验 base64 字符集，异常立即阻断，拒绝把脏数据写进 HTML。
+- **页脚对齐（v2.1.1 修）**：`.main-wrap` 和 `.report-footer` 都带 `padding-left`（48px / ≥1200px 时 248px，给固定侧栏让位），两者是**兄弟节点**时才各偏移一次、左边缘对齐；footer 一旦嵌进 `.main-wrap`，248px 叠加两次，页脚就跑到页面中间。坐标验收：三档视口（1060 / 1440 / 1600）下 `.brand-block` 的 x 必须等于 `#appendix` 的 x，差为 0。
 - 已实测：两张码真实加载（556×550 / 598×550），点击放大层复用同一张图、ESC 关闭；
   三模式 A/B/C 报告均 `P0=0/P1=0`、二维码 2 张、远程资源 0；删掉 brand-block 标记
   即触发 `P0-9` 阻断（负向用例）。

@@ -1,5 +1,5 @@
 ---
-version: 1.3
+version: 1.4
 name: seven-step-hydro-paper-adaptation
 description: 七步财报分析复用的 HYDRO PAPER v3.0 皮肤规格与适配层约定。同源完整规格见八维行业分析 skill 的 references/hydro-design-spec.md。
 status: 默认版式；取代七步模板自带的深蓝金棕 :root 表现（结构与类名不变）
@@ -15,6 +15,7 @@ status: 默认版式；取代七步模板自带的深蓝金棕 :root 表现（�
 **本 skill 与八维版的差异**（不要照搬八维规格里的组件）：
 
 > v2.1.0 更新：页脚 brand 区块已按八维 v3.2.2 移植，不再列作差异；实现细节见 `SKILL.md §19.5.1`。
+> v2.1.1 更新：补齐 **DOM 层级契约** —— 只搬 CSS 不搬结构会导致页脚双重左偏移，详见 §4 与 §6 的 P0-10。
 
 | 项 | 八维版 | 七步版 |
 |---|---|---|
@@ -62,6 +63,7 @@ font-mono    SFMono-Regular / JetBrains Mono
 | 金色 inline 隔离框 | `.source-box.quarantine` | 金色左边线，2026 前三季度等隔离期专用 |
 | `.warning-box` / `.report-footer` | 适配层补齐 | 左侧 2px 警示线 / 顶部发丝线 |
 | 旧单行署名 footer | `<footer class="report-footer">` + `.brand-block` + 2 张二维码 + `#qrLightbox` | 强制输出，二维码 data URI 内嵌，点击放大复用同一份图 |
+| footer DOM 层级 | `<body>` 直接子元素，与 `.main-wrap` **兄弟** | **v2.1.1 硬约束**：`.main-wrap` 与 `.report-footer` 各自带 `padding-left:48px`（≥1200px 时 248px，给固定侧栏让位）；若 footer 嵌进 `.main-wrap`，偏移叠加两次，页脚相对正文右移 48/248px。坐标验收：1060 / 1440 / 1600 三档视口下 `.brand-block` 的 x 必须等于 `#appendix` 的 x |
 
 Hero 结构：`.hero` + `.hero-art`（等高线 SVG，标签年份由 `years` 注入，x=360 防裁切）
 + `.hero-masthead` + `.hero-overline` + `h1[data-note]` + `.badge` + `.subtitle`
@@ -92,6 +94,7 @@ Hero 结构：`.hero` + `.hero-art`（等高线 SVG，标签年份由 `years` �
 | P0-7 | 9 个 step-card + appendix + 免责声明 |
 | P0-8 | 空数据图（`names=[]` / `series=[]` / `data:[]` / `labels:[]`）必须有对应 `data-chart` 的 `.chart-empty-note` 提示卡（静默空图阻断） |
 | P0-9 | 作者溯源 brand 区块强制在位：brand-block / qrLightbox / 2 个 `.brand-qr` / 2 张 `data:image/png;base64,` / 公众号+视频号标识 |
+| P0-10 | `footer.report-footer` 不得嵌在 `.main-wrap` 内（栈解析判定），必须是 `<body>` 直接子元素；防止页脚双重左偏移 |
 | P1 | emoji / Markdown 残留、`.chart-card` 与 `.table-wrap` 覆盖、Hero 数据截止时点、本地 assets |
 
 ## 7. headless 截图坑
@@ -100,6 +103,7 @@ Hero 结构：`.hero` + `.hero-art`（等高线 SVG，标签年份由 `years` �
 `capture.py` 的做法：把目标 section 裁成独立 HTML（复用完整 `<head>` + 全部 `<script>`，
 本地 assets 改绝对 file URI + 覆盖层隐藏侧栏/渐入），再截图。不修改交付文件。
 `--section footer` 与 `--all` 已包含页脚 brand 区块，用于二维码目视验收。
+页脚对齐不能只靠截图肉眼判断：用 headless 浏览器取 `.brand-block` 与 `#appendix` 的 `getBoundingClientRect().x`，三档视口差值必须为 0（v2.1.0 实测为 48 / 248 / 248）。
 
 首屏截图里浮动侧栏压住 Hero 是 CSS 过渡未推进的中间帧（DOM 中已带 `nav-hidden`），
 交付 HTML 无需为此做妥协性改动；生成器已让侧栏初始即隐藏。

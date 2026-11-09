@@ -557,8 +557,11 @@ def build_appendix(cfg):
            '<div class="step-title">附录 · 数据口径与校验记录</div>'
            '<div class="step-sub">DATA PROVENANCE · 原始表、缺口与免责声明</div></div></div>\n'
            '<div class="step-body">' + clean(cfg.get('appendix_html', '')) + '\n</div>\n</div>\n')
-    # brand 溯源条强制输出（P0-9）；不经过 clean()，避免清洗逻辑触碰 base64。
-    return app + render_brand_footer(cfg) + '\n'
+    # brand 溯源条由 build() 单独挂在 </div.main-wrap> 之后，不随附录进主容器。
+    # 原因：.main-wrap 与 .report-footer 各自带 padding-left:248px（宽屏给侧栏让位），
+    # 若 footer 嵌在 main-wrap 内，248px 会叠加两次，页脚相对正文右移 248px。
+    # 八维 HYDRO PAPER 模板的 footer 是 <body> 直接子元素，此处保持同一 DOM 契约（P0-10）。
+    return app
 
 
 def normalize_chart_colors(scripts):
@@ -656,8 +659,11 @@ def build(cfg, css):
                   esc(cfg.get('company', '')) + ' ' + esc(cfg.get('code', '')) +
                   ' · 十年年报口径</span></h2>\n' + cfg.get('summary_html', '') +
                   clean(cfg.get('exec_inner_html', '')) + '\n</div>\n')
+    # footer 必须是 <body> 直接子元素（P0-10）：不能放进 .main-wrap，
+    # 否则 .main-wrap / .report-footer 的双重 padding-left 会把页脚推到页面中间。
     main = ('<div class="main-wrap">\n' + build_toc(cfg) + '\n' + exec_block +
-            '<div id="chart-error"></div>\n' + build_steps(cfg) + build_appendix(cfg) + '\n</div>\n')
+            '<div id="chart-error"></div>\n' + build_steps(cfg) + build_appendix(cfg) +
+            '\n</div>\n' + render_brand_footer(cfg))
     doc = ('<!DOCTYPE html>\n<html lang="zh-CN" data-theme="light">\n' +
            build_head(cfg, css) + '\n<body>\n' + build_header(cfg) + '\n' +
            main + build_scripts(cfg) + '</body>\n</html>\n')

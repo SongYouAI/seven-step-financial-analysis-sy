@@ -1,6 +1,6 @@
 # 七步财报分析法 · Seven-Step Financial Analysis
 
-> **v2.1.0**｜基于饶刚《简明财务分析》「七步法」升级的财报分析引擎。三张原始表 → Phase 0 指标引擎 → 九步分析 → **HYDRO PAPER 研报级 HTML**（16 图 + 交付门禁），全程可离线、零远程资源、零第三方 Python 依赖。
+> **v2.1.1**｜基于饶刚《简明财务分析》「七步法」升级的财报分析引擎。三张原始表 → Phase 0 指标引擎 → 九步分析 → **HYDRO PAPER 研报级 HTML**（16 图 + 交付门禁），全程可离线、零远程资源、零第三方 Python 依赖。
 
 数据来源支持三档：本地 CSV / **A 股 ONLINE 内置拉数（东财 F10 公开接口）** / 港股美股 ONLINE / 手动输入。没有本地财报也能闭环产出报告。
 
@@ -20,7 +20,7 @@
 
 ---
 
-## ✨ v2.1.0 核心能力
+## ✨ 核心能力
 
 - **HYDRO PAPER 研报皮肤**：暖纸底 + 宋体大标题 + 蓝色等高线艺术层 + 章节编号水印 + `FIG.01–16` 图表卡，单强调色；亮/暗主题由 `data-theme` 控制。三层 CSS 注入顺序固定：`hydro-base` → `hydro-skin` → `sevenstep-adapt`。
 - **数据驱动渲染器** `scripts/render_report.py`：三种模式
@@ -28,9 +28,10 @@
   - B：`--data content.json --prefilled report_prefilled.html` 复用 `build_report_data.py` 抽出的 16 图脚本；
   - C：`--from-html 旧成品.html --data overrides.json` 仅换肤，数值零改动。
 - **A 股 ONLINE 内置拉数**：`build_online_puller.py` 直连东财 F10 公开接口 `RPT_F10_FINANCE_G{BALANCE,INCOME,CASHFLOW}`，零第三方依赖；自动补 `.SH/.SZ` 后缀、`REPORT_TYPE=年报` + `REPORT_DATE` 双重期次隔离、`.BJ` 明确报错退出。
-- **HTML 交付门禁** `scripts/check_html.py`：P0 拦截残留占位符、16 canvas ↔ 16 注册脚本、零远程资源、三层皮肤在位、内联 JS `node --check`、9 步 + 附录 + 免责声明、**静默空图**、**作者溯源二维码**；P1 检查 emoji / Markdown 残留、图表卡与表格滚动容器覆盖率、Hero 数据截止时点。
+- **HTML 交付门禁** `scripts/check_html.py`：P0 拦截残留占位符、16 canvas ↔ 16 注册脚本、零远程资源、三层皮肤在位、内联 JS `node --check`、9 步 + 附录 + 免责声明、**静默空图**、**作者溯源二维码**、**页脚层级 P0-10**；P1 检查 emoji / Markdown 残留、图表卡与表格滚动容器覆盖率、Hero 数据截止时点。
 - **静默空图防护**：缺 `segment_revenue.csv` / `headcount` / `peer_comparison.csv` 时不再画空坐标轴，改输出「本图数据未取得」提示卡，并由门禁反向阻断。
 - **作者溯源页脚**：公众号 / 视频号二维码以 `data:image/png;base64,` 内嵌（不依赖远程图片），配置在 `assets/brand.json`，支持点击放大。
+- **页脚层级契约（v2.1.1）**：`<footer class="report-footer">` 必须是 `<body>` 直接子元素，与 `.main-wrap` 兄弟。二者各自带 `padding-left`（48px / ≥1200px 时 248px，给固定侧栏让位）；若嵌套，偏移叠加两次，二维码溯源条会跑到页面中间。`check_html.py` 的 P0-10 栈解析门禁反向阻断。
 - **端到端编排** `scripts/orchestrate.py`：fail-fast 闭环，核心步骤失败立即退出，不吞返回码。
 - **A 股涨红跌绿**：`.up/.d` 红、`.down/.r` 绿，语义变量与颜色名解耦。
 
@@ -110,7 +111,7 @@ seven-step-financial-analysis/
 │   ├── qr-wechat.png / qr-video.png
 │   └── chart.umd.min.js / chartjs-plugin-datalabels.min.js   # 本地图表库
 ├── references/
-│   ├── hydro-design-spec.md        # 七步专用视觉规格（v1.3）
+│   ├── hydro-design-spec.md        # 七步专用视觉规格（v1.4）
 │   ├── SOP_七步财报分析指标公式.md
 │   ├── 内容标准_五件套.md / 阈值标尺库.md / 术语人话词典.md
 │   ├── 反面假设清单.md / segment_aliases.json
@@ -159,6 +160,7 @@ python3 .../orchestrate.py --in ./raw_csv --out ./out \
 | **v2.0.0** | 沉淀 HYDRO PAPER v3.0 皮肤；新增数据驱动 `render_report.py`、HTML 门禁 `check_html.py`、分段截图 `capture.py`；`orchestrate.py` 改 fail-fast；修复约 42 项 bug |
 | **v2.0.1** | 静默空图 P0-8：缺辅助表改提示卡，门禁反向阻断 |
 | **v2.0.2** | A 股 ONLINE 内置拉数（东财 F10）；修复图16 缺 `peer_comparison.csv` 时残留占位符 P0；换源逐格登记口径差异 |
+| **v2.1.1** | 修复页脚层级 P0：`footer` 改回 `<body>` 直接子元素，消除 `padding-left` 双重偏移（二维码溯源条不再跑到页面中间）；新增 P0-10 门禁；三档视口坐标验收差为 0 |
 | **v2.1.0** | 公众号 / 视频号二维码 brand 页脚（内嵌 data URI、零远程资源）；新增 P0-9 门禁；`capture.py` 增 `--section footer` |
 
 > 已知限制见 `SKILL.md §19.6`：同源双版本尚未合并；`build_segment.py` 占比量纲假设；`build_forecast.py` 死代码；R4 仍为全文级弱校验；期次隔离依赖 `content.json` 的 `quarantine` 字段与人工纪律。

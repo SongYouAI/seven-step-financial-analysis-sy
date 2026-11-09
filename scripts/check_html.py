@@ -15,6 +15,7 @@
   P0-7  9 个 step-card + 1 个 appendix，且免责声明在位
   P0-8  静默空图：数据数组为空的图必须有「未披露」提示卡（禁空白坐标轴交付）
   P0-9  作者溯源 brand 区块强制在位：公众号 + 视频号二维码（data URI 内嵌、零远程）
+  P0-10 页脚层级：footer.report-footer 必须是 <body> 直接子元素，不得嵌在 .main-wrap 内
   P1-1  正文无 emoji（字体缺字会渲染成豆腐块）
   P1-2  Markdown 残留（**粗体** / |--- 表格分隔 / 未转 <table>）
   P1-3  图表卡 .chart-card / .chart-idx 覆盖率
@@ -65,6 +66,28 @@ def find_node():
         if p:
             return p
     return None
+
+
+def footer_inside_main_wrap(text):
+    """P0-10：检测 footer 是否嵌在 .main-wrap 内。
+
+    .main-wrap 与 .report-footer 各自带 padding-left（宽屏 248px，给固定侧栏让位）。
+    footer 一旦嵌进 main-wrap，248px 会叠加两次，页脚相对正文右移 248px。
+    八维 HYDRO PAPER 模板的 footer 是 <body> 直接子元素，此处保持同一 DOM 契约。
+    """
+    m_footer = re.search(r'<footer[^>]*class="[^"]*\breport-footer\b', text, re.I)
+    if not m_footer:
+        return False
+    end = m_footer.start()
+    stack = []
+    tag_re = re.compile(r'<(/?)div\b([^>]*)>', re.I)
+    for m in tag_re.finditer(text, 0, end):
+        if m.group(1):
+            if stack:
+                stack.pop()
+        else:
+            stack.append(bool(re.search(r'\bclass="[^"]*\bmain-wrap\b', m.group(2), re.I)))
+    return any(stack)
 
 
 def main():
@@ -183,6 +206,11 @@ def main():
     for _label in ('公众号', '视频号'):
         if _label not in t:
             p0.append('P0-9 缺渠道标识「%s」' % _label)
+
+    # P0-10 页脚层级（v2.1.1）：嵌套会让 padding-left 叠加，页脚跑到页面中间。
+    if footer_inside_main_wrap(t):
+        p0.append('P0-10 footer.report-footer 嵌在 .main-wrap 内：padding-left 双重偏移，'
+                  '页脚相对正文右移；请让 footer 成为 <body> 直接子元素')
 
     # P1-1 emoji
     emo = sorted(set(EMOJI_RE.findall(body)))
