@@ -271,7 +271,7 @@ class TestPackageIntegrity(unittest.TestCase):
         skill_md = (SK / 'SKILL.md').read_text(encoding='utf-8')
         m = re.search(r'^version:\s*(\S+)', skill_md, re.M)
         self.assertIsNotNone(m)
-        self.assertEqual(m.group(1), '2.1.3')
+        self.assertEqual(m.group(1), '2.1.6')
         self.assertNotIn('松幽Ai提效', skill_md)
         brand = json.loads((SK / 'assets' / 'brand.json').read_text(encoding='utf-8'))
         self.assertEqual(brand['video'], '松幽AI')

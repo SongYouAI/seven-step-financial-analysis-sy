@@ -8,7 +8,9 @@
 检查项：
   P0-1  大写叙事占位符零残留（{{STEP1_CONTENT}} 等）
   P0-2  16 张 canvas 与 16 个 __reg 注册一一对应，且每步都内嵌 canvas
-  P0-3  零远程资源（script/link/img 的 http(s) 引用）、必须本地 assets/
+  P0-3  零远程资源依赖（script/link/img 的 http(s) 引用）、必须本地 assets/；
+        v2.1.4 起 <a class="ref"> 来源角标为白名单（点击才联网，不影响离线渲染），
+        但必须带 target="_blank" rel="noopener"，且 URL 要在来源汇总表登记
   P0-4  HYDRO PAPER 三层样式在位（hydro-base / hydro-skin / sevenstep-adapt）
   P0-5  内联 <script> 全部 node --check 通过
   P0-6  标签配平（div/section/table/script/style/blockquote）
@@ -20,16 +22,27 @@
         （报告会被单独复制/转发；外链本地资源 = 16 张图全空，typeof Chart === undefined）
   P0-12 16 图的数据标签 formatter 必须 null 安全（缺值按设计填 null 做断点；
         裸 v.toFixed() 会让 datalabels 抛 TypeError，整张图渲染失败）
+  P0-14 表格排版质量（v2.1.6）：每张表必须经 enhance_tables() 注入
+           data-table / colgroup / 列宽合计 100% / min-width；**th 与同列
+           td 必须带同一组列语义类**（num / cell-key / cell-year / ...），
+           否则表头与数据左右混排；CSS 必须含 table-layout:fixed、列级
+           对齐规则、短列 nowrap、数字列右对齐、表头括注不拆行；
+           图表数据标签必须移到柱顶外侧且顶部留白。
+  P0-13 来源可核查（对标八维 P0-4）：id=src-summary 六元组汇总、≥12 个可点击角标、
+        ≥5 个独立域名、无纯域名首页、角标 URL 全部登记、六元组列齐全、
+        取数日期与 source-meta 本轮联网留痕、source-box + 状态徽章 + 页内跳转
   P1-1  正文无 emoji（字体缺字会渲染成豆腐块）
   P1-2  Markdown 残留（**粗体** / |--- 表格分隔 / 未转 <table>）
   P1-3  图表卡 .chart-card / .chart-idx 覆盖率
   P1-4  表格移动端滚动容器 .table-wrap 覆盖率
   P1-5  数据截止时点（YYYY-MM-DD HH:MM 或 YYYY-MM-DD）出现在 Hero
   P1-6  若仍保留相对 assets/ 引用，则同目录两个 js 必须齐备（v2.1.2 内联后已不再依赖）
+  P1-7  悬空来源标记 UNSOURCED / [待验证] / [过时] 零残留
 
 退出码：0=通过（可有 P1），1=P0 阻断，2=文件/依赖错误。
 """
 import argparse
+import html
 import re
 import shutil
 import subprocess
@@ -52,6 +65,45 @@ def empty_note_ids(text):
                           text, re.I):
         out.update(re.findall(r'data-chart="(chart\d+)"', tag))
     return out
+
+
+def split_source_refs(text):
+    """返回 (合规来源角标 URL 集合, 不合规角标 URL 列表)。
+
+    v2.1.4：把「资源型远程引用」和「引用型溯源链接」分开。前者会让报告
+    离开 assets/ 后丢图表库（v2.1.2 事故），必须继续 P0 阻断；后者只在用户
+    点击时联网，离线打开时正文与 16 图照常渲染，予以放行。
+    白名单必须同时满足 class 含 ref / target=_blank / rel 含 noopener，
+    避免有人用普通 <a href="https://cdn..."> 绕过 P0-3。
+    """
+    allowed, bad = set(), []
+    for tag in re.findall(r'<a\b[^>]*>', text, re.I):
+        cls = re.search(r'\bclass\s*=\s*[\"\']([^\"\']*)[\"\']', tag, re.I)
+        if not cls or 'ref' not in cls.group(1).split():
+            continue
+        href = re.search(r'\bhref\s*=\s*[\"\'](https?://[^\"\']+)[\"\']', tag, re.I)
+        if not href:
+            continue
+        url = html.unescape(href.group(1))
+        if (re.search(r'\btarget\s*=\s*[\"\']_blank[\"\']', tag, re.I) and
+                re.search(r'\brel\s*=\s*[\"\'][^\"\']*\bnoopener\b[^\"\']*[\"\']',
+                          tag, re.I)):
+            allowed.add(url)
+        else:
+            bad.append(url)
+    return allowed, bad
+
+
+def is_pure_domain(url):
+    """纯域名首页不合格：点开找不到被引数字（output-spec 四级颗粒度）。"""
+    from urllib.parse import urlparse
+    u = urlparse(url)
+    return not u.path.strip('/') and not u.query and not u.fragment
+
+
+def source_domains(urls):
+    from urllib.parse import urlparse
+    return sorted({urlparse(u).netloc.lower() for u in urls if urlparse(u).netloc})
 
 
 def _managed_nodes():
@@ -147,13 +199,22 @@ def main():
         p1.append('P1-3 %d 个 canvas 未内嵌在 step-card（裸放在卡外）'
                   % (len(canvases) - n_in_cards))
 
-    # P0-3 远程资源
-    # 属性引号 / 等号空格 / CSS url() / srcset 一律归一化后再扫，防单引号绕过
-    remote = re.findall(r'(?:src|href)\s*=\s*[\"\'](https?://[^\"\']+)[\"\']', t, re.I)
-    remote += re.findall(r'url\(\s*[\"\']?(https?://[^)\s\"\']+)', t, re.I)
-    remote += re.findall(r'srcset\s*=\s*[\"\']([^\"\']*https?://[^\"\']+)[\"\']', t, re.I)
+    # P0-3 远程资源依赖（v2.1.4 起区分资源型 / 引用型）
+    # src / CSS url() / srcset / <link href> 一律禁：离线打开会缺图表库。
+    # <a class="ref" href="http…" target="_blank" rel="noopener"> 点击才联网，
+    # 不参与离线渲染，予以放行（对标八维 P0-4 可核查链接）。
+    src_remote = re.findall(r'\bsrc\s*=\s*[\"\'](https?://[^\"\']+)[\"\']', t, re.I)
+    href_remote = re.findall(r'\bhref\s*=\s*[\"\'](https?://[^\"\']+)[\"\']', t, re.I)
+    css_remote = re.findall(r'url\(\s*[\"\']?(https?://[^)\s\"\']+)', t, re.I)
+    srcset_remote = re.findall(r'srcset\s*=\s*[\"\']([^\"\']*https?://[^\"\']+)[\"\']', t, re.I)
+    ref_allowed, ref_bad = split_source_refs(t)
+    remote = (src_remote + css_remote + srcset_remote +
+              [u for u in href_remote if html.unescape(u) not in ref_allowed])
     if remote:
-        p0.append('P0-3 远程资源 %d 处: %s' % (len(remote), ', '.join(remote[:3])))
+        p0.append('P0-3 远程资源依赖 %d 处: %s' % (len(remote), ', '.join(remote[:3])))
+    if ref_bad:
+        p0.append('P0-3 %d 个来源角标缺 target="_blank"/rel="noopener": %s'
+                  % (len(ref_bad), ', '.join(ref_bad[:3])))
     if 'cdn.jsdelivr' in t:
         p0.append('P0-3 存在 CDN 兜底分支（本环境不可达）')
 
@@ -197,6 +258,49 @@ def main():
                   % (len(unsafe_fmt), ', '.join(unsafe_fmt)))
     null_points = len(re.findall(r'\bdata\s*:\s*\[[^\]]*\bnull\b',
                                  '\n'.join(reg_blocks)))
+
+    # ---- P0-13 来源可核查（v2.1.4 · 对标八维 P0-4 / P1-6 / P1-7）----
+    # 只做离线静态门禁：网络探活由 verify_links.py --strict 单独跑。
+    # 门禁本身绝不依赖网络，否则离线出稿会被当次网络状况误杀。
+    sidx = t.find('id="src-summary"')
+    summary = t[sidx:] if sidx >= 0 else ''
+    ref_urls = sorted(ref_allowed)
+    domains = source_domains(ref_urls)
+    if sidx < 0:
+        p0.append('P0-13 缺 id="src-summary" 来源汇总锚点区（六元组表 + 取数日期）')
+    if len(ref_urls) < 12:
+        p0.append('P0-13 可点击来源角标仅 %d 个（应 ≥12，每步 + 关键数据均需可回溯）'
+                  % len(ref_urls))
+    if len(domains) < 5:
+        p0.append('P0-13 独立来源域名仅 %d 个（应 ≥5，疑似单一来源复用）' % len(domains))
+    pure = [u for u in ref_urls if is_pure_domain(u)]
+    if pure:
+        p0.append('P0-13 %d 条纯域名首页不合格（应指向具体披露页/带锚点）: %s'
+                  % (len(pure), ', '.join(pure[:3])))
+    missing_reg = [u for u in ref_urls
+                   if u not in summary and html.escape(u, quote=True) not in summary]
+    if missing_reg:
+        p0.append('P0-13 %d 条角标 URL 未在 src-summary 六元组表登记: %s'
+                  % (len(missing_reg), ', '.join(missing_reg[:3])))
+    for kw in ('口径', '页面标题', '发布日期', '抓取日期'):
+        if kw not in summary:
+            p0.append('P0-13 来源汇总表缺六元组列「%s」' % kw)
+            break
+    if not re.search(r'20\d{2}-\d{2}-\d{2}', summary):
+        p0.append('P0-13 来源汇总区缺取数/抓取日期（YYYY-MM-DD）')
+    meta_tag = re.search(r'id="source-meta"[^>]*>', t)
+    if (not meta_tag or
+            not re.search(r'data-fetched-at="\d{4}-\d{2}-\d{2}"', meta_tag.group(0)) or
+            'data-online-checked=' not in meta_tag.group(0)):
+        p0.append('P0-13 缺 id="source-meta" 本轮联网核实留痕'
+                  '（data-fetched-at / data-online-checked）')
+    if t.count('class="source-box"') < 1:
+        p0.append('P0-13 正文缺 .source-box 数据来源框')
+    if 'href="#src-summary"' not in t:
+        p0.append('P0-13 来源框缺 href="#src-summary" 页内跳转')
+    if 'status-badge' not in t:
+        p0.append('P0-13 来源框缺状态徽章（已验证 / 已解释 / 数据缺口）')
+    n_src_ref, n_src_dom = len(ref_urls), len(domains)
 
     # P0-4 三层皮肤
     for sid in ('hydro-base', 'hydro-skin', 'sevenstep-adapt'):
@@ -299,10 +403,83 @@ def main():
     if n_table and n_wrap < n_table:
         p1.append('P1-4 %d 张表中仅 %d 张有移动端滚动容器' % (n_table, n_wrap))
 
+    # ---- P0-14 表格排版质量（v2.1.6 · 竖排 / 挤叠 / 左右混排三类事故）----
+    # ① 裸 table + table-layout:auto → 中文短列被压成 1 字宽竖排；
+    # ② 逐格判定数字列 + th 完全不打类 → 31/31 张表同列 left/right 混排、
+    #    表头与数据中心最大偏移 165px。列宽合格 != 对齐合格，必须单独验。
+    tbl_blocks = re.findall(r'<table\b([^>]*)>(.*?)</table>', t, re.S | re.I)
+    if not tbl_blocks:
+        p0.append('P0-14 报告无表格（七步报告必须含数据表与来源汇总表）')
+    else:
+        bare = [i + 1 for i, (ta, _) in enumerate(tbl_blocks)
+                if 'data-table' not in ta]
+        if bare:
+            p0.append('P0-14 %d 张表是裸 table（未经 enhance_tables，会竖排）: %s'
+                      % (len(bare), ', '.join('#%d' % i for i in bare[:8])))
+        bad_cols, bad_min = [], []
+        for i, (ta, tb) in enumerate(tbl_blocks):
+            n_th = len(re.findall(r'<th\b', tb, re.I))
+            n_col = len(re.findall(r'<col\b', tb, re.I))
+            widths = [float(x) for x in
+                      re.findall(r'<col[^>]*width:\s*([\d.]+)%', tb)]
+            if ('<colgroup' not in tb or (n_th and n_col != n_th)
+                    or not widths or abs(sum(widths) - 100) > 0.5):
+                bad_cols.append('#%d' % (i + 1))
+            if not re.search(r'min-width:\d+px', ta):
+                bad_min.append('#%d' % (i + 1))
+        if bad_cols:
+            p0.append('P0-14 %d 张表列宽契约不合格（colgroup / 列数 / 合计100%%）: %s'
+                      % (len(bad_cols), ', '.join(bad_cols[:8])))
+        if bad_min:
+            p0.append('P0-14 %d 张表缺 min-width（宽表会被压回正文宽度）: %s'
+                      % (len(bad_min), ', '.join(bad_min[:8])))
+
+        # 列级对齐契约：同一列的表头与数据必须拿到同一组语义类。
+        # 缺少任何一处，CSS 的 .num 右对齐就只作用于其中一半，肉眼即错位。
+        ROLES = {'num', 'cell-key', 'cell-year', 'cell-tight', 'cell-status'}
+
+        def col_roles(attrs):
+            mc = re.search(r'class="([^"]*)"', attrs)
+            return set(mc.group(1).split() if mc else []) & ROLES
+
+        bad_align = []
+        for i, (_, tb) in enumerate(tbl_blocks):
+            hm = re.search(r'<thead[^>]*>(.*?)</thead>', tb, re.S | re.I)
+            bm = re.search(r'<tbody[^>]*>\s*<tr[^>]*>(.*?)</tr>', tb, re.S | re.I)
+            if not hm or not bm:
+                continue
+            ths = re.findall(r'<th\b([^>]*)>', hm.group(1), re.I)
+            tds = re.findall(r'<td\b([^>]*)>', bm.group(1), re.I)
+            if len(ths) != len(tds):
+                continue                # colspan 等特殊行交给列宽契约检查
+            for j, (a, b) in enumerate(zip(ths, tds)):
+                if col_roles(a) != col_roles(b):
+                    bad_align.append('#%d c%d' % (i + 1, j))
+        if bad_align:
+            p0.append('P0-14 %d 处表头/数据列类不一致（同列会左右混排）: %s'
+                      % (len(bad_align), ', '.join(bad_align[:8])))
+    for rule in ('table-layout:fixed', '.cell-tight', 'td.num',
+                 'white-space:nowrap;flex:none',
+                 '.data-table thead th.cell-key',
+                 '.data-table tbody td.num.cell-tight',
+                 '.data-table thead th .unit',
+                 'text-align:left;'):
+        if rule not in t:
+            p0.append('P0-14 sevenstep-adapt.css 缺表格规则 %s' % rule)
+    if "align='top'" not in t or 'padding.top=22' not in t:
+        p0.append('P0-14 图表数据标签未移到柱顶外侧 / 顶部无留白')
+
     # P1-5 数据截止时点
     hero = t[t.find('<header class="hero"'):t.find('</header>') + 9]
     if not re.search(r'\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?', hero):
         p1.append('P1-5 Hero 未见数据截止时点（YYYY-MM-DD [HH:MM]）')
+    elif not any(w in hero for w in ('截至', '截止', '数据时点')):
+        p1.append('P1-5 Hero 有日期但缺「截至/截止/数据时点」口径关键词')
+
+    # P1-7 悬空来源标记（v2.1.4）
+    for mark in ('UNSOURCED', '[待验证]', '[过时]'):
+        if mark in doc_body:
+            p1.append('P1-7 正文残留悬空标记 %s（需补来源或改写为 L4 降级署名）' % mark)
 
     # P1-6 相对 assets/ 引用（v2.1.2 起已内联，正常应为 0；保留兼容旧流程）
     assets = p.parent / 'assets'
@@ -316,6 +493,9 @@ def main():
     print('  体积 %d bytes | step-card %d | canvas %d | __reg %d | chart-card %d | table %d | 空图提示 %d/%d | 二维码 %d | 内联图表库 %d/2 | null断点 %d'
           % (p.stat().st_size, n_steps, len(canvases), len(regs), n_chart_card,
              n_table, len(noted), len(empty_ids), n_qr_img, len(inlined), null_points))
+    print('  来源角标 %d | 来源域名 %d | src-summary %s | 来源留痕 %s'
+          % (n_src_ref, n_src_dom, '在位' if sidx >= 0 else '缺',
+             '在位' if meta_tag else '缺'))
     for x in p0:
         print('  ❌ ' + x)
     for x in p1:

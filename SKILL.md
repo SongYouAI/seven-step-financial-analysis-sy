@@ -2,12 +2,12 @@
 name: seven-step-financial-analysis
 slug: seven-step-financial-analysis-sy
 displayName: 七步财报分析
-version: 2.1.3
+version: 2.1.6
 author: 松幽（公众号「松幽舒苑」· 视频号「松幽AI」）
-description: 基于《简明财务分析》"七步法"的升级版财报分析skill。内置指标生成引擎（scripts/ 15 个 Python 脚本）与 HYDRO PAPER 暖纸底报告皮肤（三层 CSS + 数据驱动渲染器 + HTML 交付门禁 + 图表库内联自包含单文件 + 作者溯源二维码页脚），无需额外安装依赖即可运行。严格按规范文件执行每步分析，生成独立Markdown报告+最终HTML（默认 HYDRO PAPER 皮肤，可回退深蓝金棕）+PDF双份成品报告。覆盖营收、成本、增长、业务构成、资产负债、投入产出、收益率、商业模式八问、同行对比九大环节。每步按规范要求的数据抽取和分析总结格式执行。支持三种数据来源：本地CSV、内置零依赖在线拉数（A股/港股/美股均由 build_online_puller.py 直连东财 datacenter，见§1.12/§1.13；A股可另选 westock-mcp 等外部源交叉验证）、手动输入；启动自动依赖自检并引导安装缺失数据源（见§1.0），无CSV时亦可闭环产出报告（见§1.1.1 ONLINE档）。分析前先经 Phase 0 指标生成（调用内置 scripts/ 引擎产出 output.csv 标准化指标表，见§1.11），七步分析统一读 output.csv，单入口闭环。
+description: 基于《简明财务分析》"七步法"的升级版财报分析skill。内置指标生成引擎（scripts/ 16 个 Python 脚本）与 HYDRO PAPER 暖纸底报告皮肤（三层 CSS + 数据驱动渲染器 + HTML 交付门禁 + 图表库内联自包含单文件 + 作者溯源二维码页脚），无需额外安装依赖即可运行。严格按规范文件执行每步分析，生成独立Markdown报告+最终HTML（默认 HYDRO PAPER 皮肤，可回退深蓝金棕）+PDF双份成品报告。覆盖营收、成本、增长、业务构成、资产负债、投入产出、收益率、商业模式八问、同行对比九大环节。每步按规范要求的数据抽取和分析总结格式执行。支持三种数据来源：本地CSV、内置零依赖在线拉数（A股/港股/美股均由 build_online_puller.py 直连东财 datacenter，见§1.12/§1.13；A股可另选 westock-mcp 等外部源交叉验证）、手动输入；启动自动依赖自检并引导安装缺失数据源（见§1.0），无CSV时亦可闭环产出报告（见§1.1.1 ONLINE档）。v2.1.4 起强制联网核实与来源可核查：六类必查数据、六元组留痕、可点击来源角标与文末汇总、P0-13 静态门禁 + verify_links 验活（见§1.2-b）。分析前先经 Phase 0 指标生成（调用内置 scripts/ 引擎产出 output.csv 标准化指标表，见§1.11），七步分析统一读 output.csv，单入口闭环。v2.1.5 起表格列宽由 enhance_tables() 内容感知统一治理、图表数字标签移出柱体，配 P0-14 静态门禁，杜绝中文短列竖排与数字挤叠（见§19.8）。v2.1.6 起表格改为列级对齐语义（th 与同列 td 同类、年份窄列、表头括注保护、宽表不裁末列），P0-14 增加列级对齐契约，杜绝表头与数据左右错位。
 ---
 
-# 七步财报分析法 Skill（v2.1.3 · 笔记风格 + HYDRO PAPER 皮肤版）
+# 七步财报分析法 Skill（v2.1.6 · 笔记风格 + HYDRO PAPER 皮肤 + 联网核实 + 表格列级对齐版）
 
 > 基于饶钢《简明财务分析》提出的"七步法"，专为二级市场投资者设计。数据来源支持本地CSV / **三市场内置零依赖在线拉数**（A股 / 港股 / 美股统一走 build_online_puller.py 直连东财 datacenter；A股可另选外部 MCP 交叉验证） / 手动输入三种方式，无本地CSV时亦可经用户授权联网或MCP拉三张表闭环产出（见§1.0前置依赖自检 与 §1.1.1 ONLINE档、§1.12 港美股拉数、§1.13 A股 ONLINE）。分析前先经 **Phase 0 指标生成**（调用内置 `scripts/` 引擎，把任意来源的财务数据组装成三张原始表 → 产出 `output.csv` 标准化指标表 + 辅助CSV，见§1.11），七步分析统一读 `output.csv` 与 Phase 0 辅助CSV，单入口闭环。使用预定义HTML模板（`report_template.html`）进行占位符填充，确保输出报告CSS一致、图表可用。启动自动依赖自检并引导安装缺失数据源（见§1.0），按资料丰度自适应验证（见§1.1.1），异常点强制✅闭环。
 
@@ -124,6 +124,38 @@ description: 基于《简明财务分析》"七步法"的升级版财报分析sk
 | CSV列序需确认 | 先检查列标题年份方向（新→旧 或 旧→新） |
 | **零幻觉** | 每个数字必须可追溯到§1.4某档来源；irm互动记录禁止作为公司确认事实（见§1.6） |
 | **数据来源归口（Phase 0）** | 核心第1–7步指标读 `output.csv` 指标名行（见§1.11 命名与「步骤标题块+指标名」二维定位）；**第4步业务构成 / 第6步人员效率由 `build_segment.py` / `build_headcount.py` 注入 `output.csv` 对应步区域**（不是独立辅助CSV，见§1.11 数据契约②）；第3步前瞻读伴侣文件 `forecast_consensus.csv`；第8步八问/第9步同行=推理叙事不读行；**禁再读原始三张表**（原始表仅 Phase 0 输入用） |
+
+### 1.2-b 联网核实与来源可核查铁律（v2.1.4 · P0 强制）
+
+> **事故背景**：v2.1.3 及以前，§1.11-b「一致预期必须本轮联网取数」只落在 4 道**人工问答自检卡点**上；`check_html.py` 的 12 条 P0 + 6 条 P1 没有任何一条检查来源。长江电力实跑报告虽临时联网取了东财 F10，但 `forecast_input.csv` 无 URL / 无抓取日期，成品 HTML **0 个来源角标、0 个外链、来源框纯文字**。换个执行者或换个会话，联网动作就会退化掉。
+
+**双轨原则**：本地 `output.csv` 是主数据源；联网核实用于**交叉复核与新鲜度校验**，不是替代。禁止只吃本地，也禁止用联网数字覆盖 Phase 0 已裁决口径——若发现冲突，按 §1.2「异常点必须闭环」分列标注，不合并、不猜成因。
+
+**六类必须本轮联网核实**（缺一类须在 `source_meta.online_checked` 标 `false` 并写明原因）：
+
+| 类别 | 权威源 | 核查动作 |
+|---|---|---|
+| 一致预期 | 东财 F10「预测统计」当前预测 / 同花顺 | 取 FY1–FY3 营收、归母、EPS + 覆盖机构数；**排除「上一个月预测」** |
+| 行情与估值时点 | 东财 / 新浪行情 | 收盘价、总市值、PE、PB；**区分动态 PE 与滚动 PE(TTM)** |
+| 最新公告与增量事件 | 巨潮资讯 / 上交所 / 公司官网 | 核对最新年报三大数字、资产注入、重大事项 |
+| 分红承诺 | 公司章程 / 股东回报规划 | 核对派息比例与现金分红绝对值 |
+| 同行可比指标 | 各公司年报 / 权威行情 | 同期口径；投资收益型公司须标注口径差异 |
+| 宏观行业口径 | 国家能源局 / 中电联 / 国家统计局 | 区分「全口径」与「规模以上工业」等统计范围 |
+
+**六元组记录制**：每条来源登记 `{数值, 口径说明, 来源URL, 页面标题, 发布日期, 抓取日期}`。链接四级颗粒度 L1 页面锚点 / L2 PDF `#page=N` / L3 查询参数直达 / L4 无公开链接降级署名。**唯一验收标准**：点开链接能直接找到被引数字。纯域名首页不合格。详见 `references/source-spec.md`。
+
+**机读留痕（缺一即 P0-13 阻断）**：
+- `content.json` 必须提供 `sources`（六元组字典）、`step_sources`（9 步来源 key）、`source_meta`（`fetched_at` / `tier` / `online_checked` 六类勾选）；可选 `link_patches`（正文关键数字补角标）。
+- `sources` 里必须有一条 key 含 `forecast` / `consensus` 且带 `url` + `fetched_at`。
+- `forecast_input.csv` 增列 `来源URL` / `抓取日期` / `口径`；`build_forecast.py` 的新鲜度告警不替代本门禁。
+
+**机械门禁（不依赖人工问答）**：
+- `check_html.py` **P0-13**：`id="src-summary"` 六元组汇总、≥12 个可点击角标、≥5 个独立域名、无纯域名首页、每条角标 URL 都在汇总区登记、六元组列齐全、取数日期与 `source_meta` 留痕、`.source-box` + 状态徽章 + `#src-summary` 跳转。
+- **P0-3** 区分资源型与引用型：`src=` / CSS `url()` / `srcset` / `<link href>` 一律禁（保离线自包含）；仅 `<a class="ref" target="_blank" rel="noopener">` 放行——点击才联网，离线打开报告内容与 16 图照常显示。
+- **P1-7**：`UNSOURCED` / `[待验证]` / `[过时]` 悬空标记零残留。
+- 发布前另跑 `python3 scripts/verify_links.py 报告.html --strict`：验活只判链接能否打开，不判页面内容；门禁本身**不依赖网络**，离线可跑。
+
+> 对标八维行业分析 skill：其成品 282 个角标 / 315 个外链 / 34 个唯一 URL / 20 个域名 / 8 个来源框 / 文末 `id=src-summary` 六元组汇总，且 P0-4 强制链接邻近率。七步的 P0-13 是同一套制度在财报场景的落地。
 
 ### 1.3 异常点回溯触发条件
 
@@ -288,6 +320,8 @@ $PY "$HOME/.workbuddy/skills/seven-step-financial-analysis/scripts/orchestrate.p
 - 取的是「当前预测」还是「上一个月预测」？→ 误取则重来
 - 是否标注来源 + 日期 + 覆盖机构家数？→ 否补
 - `EPS × 总股本 ≈ 归母净利`？（误差<2%）→ 否重取
+
+**机械约束（v2.1.4 起，不再只靠人工问答）**：以上四问之外，`content.json` 的 `source_meta.online_checked["一致预期"]` 必须为 `true` 且 `fetched_at` 为 `YYYY-MM-DD`；`sources` 里须有 `forecast` / `consensus` 条目带 `url` + `fetched_at`。缺任一项，`check_html.py` P0-13 直接拒绝出稿（见 §1.2-b）。联网若取到的数值与本地 Phase 0 聚合口径不一致，**照实登记差异、分列标注，不得悄悄改数**。
 
 ---
 
@@ -1015,8 +1049,10 @@ Step 5: 产出验证报告MD + 更新最终投资建议
 | `assets/chart.umd.min.js` / `chartjs-plugin-datalabels.min.js` | `inline_lib()` / `copy_assets()` | `sys.exit`（最终 HTML 整段内联） |
 | `assets/brand.json` | `load_brand()` | `sys.exit`（含双二维码 base64） |
 | `assets/qr-wechat.png` / `qr-video.png` | `qr_data_uri()` 回退源图 | 可选：`brand.json` 已内嵌 base64，缺 PNG 仍能出图（商店版） |
-| `scripts/*.py` 全部 15 个 | `orchestrate.py` 模块 0–9 | 缺对应模块即流水线失败 |
+| `scripts/*.py` 全部 16 个 | `orchestrate.py` 模块 0–9 | 缺对应模块即流水线失败 |
 | `references/*.md` 全部 7 个 | 质检器 / 词典 / 标尺库 | 术语释义、R2/R3 校验失效 |
+| `scripts/verify_links.py` | 发布前 `--strict` 验活 | 缺则来源链接能否打开无法证明（P0-13 只做静态门禁） |
+| `references/source-spec.md` | 六元组 / 四级颗粒度规范 | 缺则来源登记无统一口径 |
 | `tests/` | 发布前自检 | 不随报告出稿，但分享版应带上 |
 
 > `_meta.json` 是 `build_online_puller.py` 在 ONLINE 档**运行时写出**的产物，不是 skill 自带元数据；分享包不包含它。
@@ -1215,7 +1251,7 @@ P0 阻断（退出码 1），P1 默认告警，`--strict-p1` 可提升为阻断�
 生成器统一输出 `<div class="step-card" id="stepN">`（P0-7 门禁按此匹配），并自动把图1 / 图2 的卡片追加到第1步末尾。
 
 **硬性要求**：
-- `steps` 必须恰好 9 项；每项 `html` 是 **HTML 片段**，不得含 `**粗体**` / `|---` 等 Markdown 残留（P1-2）；表格须包 `class="table-wrap table-scroll"`（P1-4）。
+- `steps` 必须恰好 9 项；每项 `html` 是 **HTML 片段**，不得含 `**粗体**` / `|---` 等 Markdown 残留（P1-2）；表格须包 `class="table-wrap table-scroll"`（P1-4）。**列宽与列类由生成器 `enhance_tables()` 统一注入 `<colgroup>` 与语义 class，禁止手写 `width` / `colgroup` / `table-layout`，禁止逐单元格判定数字列**（P0-14，见 §19.8）。v2.1.6 起 `<th>` 必须与其同列 `<td>` 带同一组列类。
 - **不要**自己写 `<section id="stepN" class="step-card">`：生成器写的是 `<div>`，手写 `<section>` 会让 P0-7 数到 0 个 step-card。
 - 16 个 canvas 与 16 个 `__reg` ID 一一对应且不得重复（P0-2）；`.chart-card` / `.chart-idx` 各 16 个（P1-3）。
 - 第8步按规范无图；其余 8 步的图号见 §14.2 映射，顺序不得改。
@@ -1372,6 +1408,8 @@ v6.1 的 ONLINE 落 `online_cache.csv` 单文件，但方式A 读的是 3 个分
 | **v7.3** | **2026-09-23** | **内容质检新增 R8「百分比量纲」规则（`|x|>1000%` 判为量纲错误）+ 新增经验#22（交付前必跑 `validate_content.py`，含 R1–R8 规则表与修警告姿势）；源自「自由现金流FCF」绝对元值被当比率渲染成 `-26277008100.00%` 而 R1–R7 全部漏检的事故。 |
 | **v7.2** | **2026-09-22** | **前瞻一致预期取数铁律 + 主源优先聚合（与 dynamic-valuation 同源事故修复）：① 新增 §1.11-b「前瞻一致预期取数铁律」P0 —— 必须本轮联网取数、禁止复用旧 `forecast_input.csv`/`forecast_consensus.csv`、**必须取东财「当前预测」而非「上一个月预测」**（实测片仔癀 FY3：当前 28.57亿/7家 vs 上一个月 31.13亿/4家，差约9%）、取数留痕（来源+日期+覆盖机构家数）与 `EPS×总股本≈归母净利` 复核；② `build_forecast.py` v3.1 **主源优先聚合**——`口径标注` 含「权威主源」的行才是共识唯一真相源，单券商行降级为「离散度旁证」仅入 `forecast_discrete.csv`、**不参与 `forecast_consensus.csv` 均值**（修复原「多机构聚合 vs 单券商等权」失真）；主源 `来源日期` >30天 触发**新鲜度告警**；③ 模板 `report_template.html` 图6「预期CAGR」窗口由硬编码 `2026E-2028E` 改为动态 `{{EXP_SPAN}}`（未注入时回退通用表述，不再写死年份），与实际 `最新A→E3 三年复合` 口径一致** |
 | **v7.0** | **2026-08-03** | **报告叙事层改版（笔记风格）：① 结论模板全面从「一问·二算·三标·四链·五用」机械框架改为老板原始笔记行文——动词式标题「第X步：看XXX（意义：XXX）」+「目的→数据抽取→做什么/为什么/怎么看→告诉普通投资者」自然结构；② 每步保留数据抽取表格、图表嵌入（16图）与异常点闭环，图表数据仍走 `build_report_data.py` 自动生成；③ 判断"优/良/警戒"改为大白话说明依据，反面可能「也可能是…」保留为写作要求；④ 术语词典/反面假设清单/阈值标尺库保留为 references 写作弹药（内部使用），不再以强制标签呈现给读者；⑤ 保留商店版全部视觉化图表与深蓝金棕 CSS（v6.3 模板资产）** |
+| **v2.1.6** | **2026-11-09** | **表格列级对齐治理（用户 3 张截图反馈「很多没对齐」「年份可以更窄」「自己截图给自己看」）**：① **定量诊断**：1440 视口逐列量测 31 张表的 `text-align` 与表头/数据文字中心，结果 **31/31 张表同列对齐不一致、31/31 表头与数据错位，最大中心偏移 165px**。v2.1.5 只量 `scrollWidth` 就宣布全绿，漏掉了整类缺陷。② **根因**：`_mark_cells()` 逐单元格判数字列（`862.42↗` 带角标不算 → 左对齐；`844.92` 算 → 右对齐），且 `<th>` 完全不打语义类。③ **渲染链重构**：新增 `_column_roles()` 按整列统计（≥50% 数据为数值/短数值串 → 整列 `num`，ISO 日期排除）、`_year_column()` 识别年份首列并返回最长值、`_col_pct()` 给年份列专用窄权重（`7.5` / 短表 `6.2`，区间值动态放宽）、`_mark_cells()` 把同一组列类同时打到 th + td（顺序 `cell-key → cell-year → num → cell-tight → cell-status`）；`UNIT_RE` 把表头短括注包 `.unit{}` 防拆字；`min-width` 系数 `Σw×7+n×32` → `Σw×6+n×24`，9 列宽表不再横裁末列。④ **CSS**：`tbody td{text-align:left}` 打底、`thead th.num` 右对齐、`.cell-key` 强制左对齐、`.cell-year` 窄字号、仅 `td.num.cell-tight` 可 nowrap、`.unit{white-space:nowrap}`。⑤ **P0-14 加列级对齐契约**：逐列比对 th 与 td 的列类集合，不一致即阻断；CSS 关键规则由 4 条扩到 8 条；`tests/test_tables.py` 由 32 项扩到 45 项。⑥ **视觉自查**：重写 31 张单表 + 8 张总览截图脚本，逐张用图像检查，修掉年份区间 `2016—2017` 撑破窄列、表头 `(亿元)` 被拆两行、ISO 日期列右对齐三处二次瑕疵。**验收：unittest 108/108；1440 视口同列混排 31→0、锚点偏移 >6px 31→0、溢出单元格 0、横滚表 8→1；31 张表逐张截图确认无竖排/挤叠/裁切/拆字。** |\n| **v2.1.5** | **2026-11-09** | **全量表格排版治理（15 张截图反馈：所有异常点表 + 全部数据表都丑）**：① **根因**：31 张表全是裸 `<table>` + 默认 `table-layout:auto`，中文可任意断行 → 短列被压到 1 字宽（「已/闭/环」「分/红/承/诺」「川/投/能/源」竖排）、9 列数据表与 7 列六元组表硬挤在 944px 正文里；`.table-scroll{min-width:640px}` 只给滚动容器，不控制列宽，完全无效。② **渲染链**：`render_report.py` 新增 `enhance_tables()`，按每列单元格视觉长度（CJK=1 / ASCII=0.55，`max(p75, max×0.8)` 夹 `[12,32]`、徽章列 +3）计算权重 → 注入 `<colgroup>` 百分比列宽（合计精确 100%）、`min-width`、`data-table` 语义类、`num` / `cell-tight` / `cell-status` / `cell-key` 单元格标记；先拆旧包裹再统一重包，幂等；`build()` 只对 `main` 调用，天然不触碰内联 JS 库。③ **CSS**：`sevenstep-adapt.css` 补 `table-layout:fixed`、统一 padding/行高、`src-tag` 绝不拆行、短列 nowrap、数字列右对齐 + `tabular-nums`、斑马纹/hover/滚动条、异常点表依据列降档。④ **图表数字标签**：图16 曾 `anchor:'end'` + 默认 `align:'center'` 把标签画进柱体（61.67% 与 40.52% 压叠）、291.13% 贴顶被裁 → BOOT 统一 `align:'top' + offset:3 + clamp:false + layout.padding.top:22`，`relax_bar_headroom()` 给无显式 `max` 的柱状图加 `grace:'12%'`。⑤ **P0-14 门禁**：逐表验 `data-table` / `colgroup` / 列数 / 宽度和 / `min-width`，验 CSS 四条关键规则与图表标签配置；`tests/test_tables.py` 32 项（含 8 项负向）。⑥ 文档新增 §19.8 表格排版规范。**回归：unittest 95/95 全绿；长江电力 31 张表全部重出，P0=0/P1=0。** |
+| **v2.1.4** | **2026-11-09** | **联网核实与来源可核查（对标八维 skill）**：① **P0 制度缺口**：§1.11-b「一致预期必须本轮联网取数」原只落在 4 道人工问答自检卡点，12 条 P0 + 6 条 P1 无一条检查来源；长江电力成品实测 0 个来源角标 / 0 个外链 / 来源框纯文字、无 URL 与抓取日期 → 新增 §1.2-b「联网核实与来源可核查铁律」，定义六类必查数据、六元组记录制、四级颗粒度、机读留痕；② **P0-3 拆分资源型与引用型**：旧版禁任何 `http(s)` src/href（为修 v2.1.2「单独转发全图空白」），把可点击溯源链接与 CDN 资源依赖混为一谈 → 仅 `src=` / CSS `url()` / `srcset` / `<link href>` 继续阻断，`<a class="ref" target="_blank" rel="noopener">` 白名单放行，离线打开正文与 16 图照常显示；③ **P0-13 来源静态门禁**：`id=src-summary` 六元组汇总 / ≥12 角标 / ≥5 独立域名 / 禁纯域名首页 / 角标 URL 全部登记 / 六元组列齐全 / `source_meta` 取数留痕 / `.source-box` + 状态徽章 + 页内跳转；**P1-7** 悬空标记零残留；④ **生成器**：`ref()` / `SRC()` / `apply_link_patches()` / `step_source_box()` / `build_source_summary()`，新增 `sources` / `step_sources` / `source_meta` / `link_patches` / `sources_html` 字段契约，汇总区不用 `.step-card` 以避开 P0-7 的 9 步硬编码；⑤ **新文件** `references/source-spec.md`（六元组规范）与 `scripts/verify_links.py`（HEAD→GET 回退验活、`--strict` 阻断、`--json` 机读）；⑥ CSS 补 `.ref` / `.status-badge` / `.src-table`；⑦ 文档同步 §13.2 依赖清单、§19.3 字段、§19.5 门禁、§19.7 自检。**回归：unittest + 3 项既有脚本式用例全绿；长江电力报告按新规范重出，25 个唯一可核查 URL / 19 个域名 / 27 条六元组登记。** |
 | **v2.1.3** | **2026-11-09** | **分享前全量审计与修复（长江电力报告实跑暴露的 skill 自身缺陷）**：① **P0 `check_html.py` 的 `body` 变量被 P0-11 内联库源码覆盖**，导致 P1-1 emoji / P1-2 Markdown 残留实际在查 JS 源码、`--strict-p1` 也恒真放行 → 正文独立命名 `doc_body`，并补负向回归；② **P0 生成器产不出 16 个 canvas 容器**：`from_prefilled()` 只抽 16 段 `__reg` 脚本，按 skill 规范写正文必然被自己的 P0-2 阻断（上一轮靠报告侧外挂脚本绕过）→ 新增 `DEFAULT_CHART_STEPS` + `inject_chart_containers()` 幂等自动补容器，§14.2.1 同步改为 HTML 片段契约；③ **单位量纲**：`normalize_pct_series()` 逐板块判尺度 + 阈值 1.5 会让同一图出现两套量纲、真实 1.2% 被 ×100 → 改 `normalize_pct_matrix()` 整图统一尺度 / 阈值 1.0 / 脏值 null / 混合形态告警；模板 8 处 Y 轴 ticks 统一 null 安全格式化；④ **Phase 0 误阻断**：`validate_output.py` 只要技术/研发两行并存即判失败，把 `build_headcount.py` 设计允许的「不同源分别保留」也拦下 → 改为按共有非空年份数值判定真重复；无技术数据时用研发替位，避免职能合计恒为 0；⑤ **门禁加严**：P0-2 查 ID 唯一性、P0-3 归一化属性引号/空格 + CSS `url()`/`srcset`、P0-11 查库特征串（防 120KB 任意 JS 绕过）、P0-12 覆盖 `ticks.callback`、P0-8 提示卡属性顺序无关、P1-3 末卡边界；⑥ 其他：`parse_peer()` 缺值不再编造 0%、`hist_cagr([])` 不崩、`build_forecast` 短行 KeyError 与多格式日期、`from_prefilled` 缺文件显式报错；⑦ 文档统一：视频号「松幽AI」、§13.1 废弃模板填充路径、§13.2 完整依赖清单、§1.11 双文件/CSV/--forecast 约定、§1.2 数据归口、版本历史追加。**回归：31/31 unittest 通过 + 3 项既有脚本式用例通过。** |
 | **v2.1.2** | **2026-11-09** | **图表库自包含 P0 修复（报告单独转发即全图空白）**：老板截图反馈「图表库未加载：请确认同目录存在 assets/」+「FIG.01 卡片全白」。**实测复现**：`_release_v2.1.1/` 下成品 `typeof Chart = undefined`、两个 `ERR_FILE_NOT_FOUND`、16/16 canvas 零绘制、17 个 console/page error；同一份 HTML 放在带 `assets/` 的目录则 `Chart = function`、16/16 绘制、0 错误。**两层原因**：① 交付时把成品 HTML 单文件复制到新目录漏带 `assets/`（本次执行疏漏）；② **skill 契约漏洞** —— v2.1.1 及以前用 `<script src="assets/chart.umd.min.js">`，报告不是自包含单文件，而 `check_html.py` 只把「本地图表库存在」列为 **P1-6 警告**，默认门禁放行残缺报告。① `render_report.py` 新增 `inline_lib()`，`build_scripts()` 改为整段内联 Chart.js 4.4.1 + datalabels 2.2.0（+218KB，成品 854,811 bytes），HTML 零远程、零同目录依赖；② `check_html.py` 新增 **P0-11**（内联标记 + 字节数 + 禁止相对 `assets/` 引用），P1-6 改为仅当存在相对引用时才校验；③ SKILL.md / `hydro-design-spec.md` 补自包含契约。**回归**：生成到完全无 `assets/` 的空目录，真实浏览器 `typeof Chart=function` / `ChartDataLabels=object`、**16/16 canvas 真实着色**（最少 1455 采样点）、`#chart-error` 隐藏、console 0 错误；22 段内联 JS `node --check` PASS；P0=0/P1=0；负向用例旧 v2.1.1 成品精确命中 4 条 P0-11。**属 skill bug，与财报数据/图表脚本无关，所有 v2.1.1 及以前的报告单独复制都会全图空白。** **同一轮闭环回归另抓到并修复图6 白图（P0-12）**：A 股 ONLINE 无一致预期时 `build_report_data.py` 按「缺值填 null 做断点、不编造」写 `data:[null, null]`，但 datalabels 的 `formatter:v=>v.toFixed(1)+'%'` 未做 null 保护，Chart.js 为 null 点调用 formatter 抛 `TypeError: Cannot read properties of null`，**整张图渲染失败**（实测 15/16 绘制、1 个 console error）。① `render_report.py` 新增 `harden_null_formatters()`，统一加固 3 种 formatter 写法（箭头函数 / function(v) / (v,i) 多单位），null 返回空串而不崩图，且不触碰内联库；② `check_html.py` 新增 **P0-12**，只扫 16 段 `__reg`（不误伤 Chart.js 内部 formatter），发现裸 `v.toFixed` 立即阻断，负向用例修复前报告精确命中 chart6/7/10/16 共 4 张。修复后闭环报告 **16/16 绘制、console 0 错误、P0=0/P1=0**。 |
 | **v2.1.1** | **2026-11-09** | **页脚层级 P0 修复（v2.1.0 移植时漏掉的 DOM 契约）**：老板截图反馈「最下方二维码区块跑到页面中间」。实测三档视口：七步 v2.1.0 成品 `.brand-block` 相对正文卡片右移 48px（1060）/ 248px（1440、1600），八维长江电力模板偏移 0。**根因：只搬了八维 brand CSS，没搬 DOM 层级**—— 八维 `<footer>` 是 `<body>` 直接子元素，七步 `render_report.py` 却把 `render_brand_footer()` 随 `build_appendix()` 塞进 `.main-wrap`；`.main-wrap` 与 `.report-footer` 各自带 `padding-left:48px`（≥1200px 时 248px，给固定侧栏让位），嵌套即双重偏移。① `render_report.py`：`build_appendix()` 只返回附录 step-card，footer 由 `build()` 挂在 `</div.main-wrap>` 之后，与八维模板一致；② `check_html.py` 新增 **P0-10**（`footer_inside_main_wrap()` 栈解析：footer 不得嵌在 `.main-wrap` 内），负向用例旧成品命中、正向用例八维模板与构造样例均放行；③ §19.5 / §19.5.1 补 DOM 契约与坐标验收标准。回归：三档视口 `brand x − appendix x = 0`、三模式 A/B/C `P0=0/P1=0`、二维码 2 张、远程资源 0。**属 skill bug，与 content.json / 生成参数无关，所有 v2.1.0 报告均受影响。** |
@@ -1427,6 +1465,12 @@ CSS 注入顺序固定：`hydro-base` → `hydro-skin` → `sevenstep-adapt`（�
 | `appendix_html` / `footer_html` | 否 | 附录正文与页脚 |
 | `chart_scripts` | 否 | 16 段 `__reg` 脚本；省略时用 `--prefilled` 自动抽取 |
 | `years` / `exp_span` | 否 | 年份轴与预期窗口；省略时从 prefilled / 旧成品推断 |
+| `sources` | **是（v2.1.4）** | 六元组字典 `{key: {org, title, url, published_at, fetched_at, level, caliber, value, tier, step_refs, note}}`；生成器据此输出每步来源框与文末 `#src-summary` 汇总表 |
+| `step_sources` | 否 | 9 项数组，每项为该步来源 key 列表；缺省时按 `sources[].step_refs` 反查 |
+| `source_meta` | **是（v2.1.4）** | `{fetched_at, tier, online_checked: {六类: bool}}`；输出 `id="source-meta"` 机读留痕，P0-13 反向复核 |
+| `link_patches` | 否 | `[{step, after, src}]`；给正文关键数字补角标，跳过 `<script>` / `<style>` / 注释与标签属性 |
+| `sources_html` | 否 | 自定义六元组汇总 HTML；缺省由 `build_source_summary()` 自动生成 |
+| `chart_captions` | 否 | 覆盖 16 图卡片标题；见 §14.2 |
 
 ### 19.4 三种调用模式
 
@@ -1457,7 +1501,17 @@ python3 "$SK/capture.py" 报告.html --all --outdir ./shots
 **P0-10 页脚层级**（`footer.report-footer` 必须是 `<body>` 直接子元素，见 §19.5.1）、
 **P0-11 图表库自包含**（Chart.js + datalabels 整段内联，见 §19.5.2）、
 **P0-12 数据标签 formatter null 安全**（缺值填 null 不崩图，见 §19.5.3）。
-P1：emoji / Markdown 残留、图表卡与表格滚动容器覆盖、Hero 数据截止时点、相对 `assets/` 引用齐备性。
+**P0-13 来源可核查**（v2.1.4：`id="src-summary"` 六元组汇总、≥12 个可点击角标、≥5 个独立域名、无纯域名首页、角标 URL 全部登记、六元组列齐全、取数日期 + `source_meta` 留痕、`.source-box` + 状态徽章 + 页内跳转，见 §1.2-b）。
+**P0-14 表格排版质量**（v2.1.6：每张表 `data-table` + `colgroup` + col 数 = th 数 + 宽度合计 100% + `min-width`；**th 与同列 td 列类一致**；CSS 八条关键规则；图表标签 `align='top'` 与顶部留白，见 §19.8）。
+P1：emoji / Markdown 残留、图表卡与表格滚动容器覆盖、Hero 数据截止时点、相对 `assets/` 引用齐备性、**P1-7 悬空来源标记零残留**。
+
+发布前还需网络验活（门禁本身离线可跑，不依赖网络）：
+
+```bash
+python3 "$SK/verify_links.py" 报告.html --strict --json ./link_report.json
+```
+
+`verify_links.py` 默认恒 0 只提示，`--strict` 才在明确失效链接时阻断；HEAD 404 → GET 200 会以 GET 复核为准，403/405/429 与超时计 skip 不误报。验活不判断页面是否真的含被引数字，后者按 `references/source-spec.md` 四级颗粒度人工抽查。
 
 ### 19.5.1 作者溯源 brand 区块（v2.1.2 · 强制输出）
 
@@ -1477,8 +1531,8 @@ P1：emoji / Markdown 残留、图表卡与表格滚动容器覆盖、Hero 数�
 - **强制输出**：页脚是报告被多级转发后唯一稳定的出处锚点，`content.json` 不能关闭或覆盖。
   `--from-html` 从旧成品抽出的 `footer_html` 单行署名不再重复渲染；自定义且不含
   `report-footer` 包装 / 免责声明的纯文本会作为附注保留。
-- **零远程**：二维码一律 `data:image/png;base64,` 内嵌，P0-3 禁止任何 `http(s)` src/href。
-  与八维版差异：八维允许 `branding.url` 追加远程链接，七步**不提供**（会与 P0-3 直接冲突）。
+- **零远程资源依赖**：二维码一律 `data:image/png;base64,` 内嵌；P0-3 仍禁 `src=` / CSS `url()` / `srcset` / `<link href>` 的 http(s) 引用。
+  v2.1.4 起品牌块仍不挂外链；来源外链统一走 `sources` 契约（`<a class="ref" target="_blank" rel="noopener">`，见 §1.2-b）。旧版「P0-3 禁止任何 http(s) src/href」的措辞已废止——它把可点击溯源链接与 CDN 资源依赖混为一谈。
 - **图表库自包含（v2.1.2）**：详见 §19.5.2。
 - **离线 / SkillHub 友好**：base64 放在纯文本 JSON 里，分发渠道拒收 PNG 也不丢图；
   `qr_data_uri()` 会校验 base64 字符集，异常立即阻断，拒绝把脏数据写进 HTML。
@@ -1539,20 +1593,48 @@ P1：emoji / Markdown 残留、图表卡与表格滚动容器覆盖、Hero 数�
 - A 股 ONLINE 档已内置（v2.0.2，见 §1.13）；但**东财 F10 与其他数据源存在口径差异**（基准缺失科目、2017 准则列示、2018 追溯重述），换源后 `output.csv` 派生指标会变，**不得声称「零差异」**，须按 §1.13 逐项定性。
 - 本目录与 `seven-step-financial-analysis-sy__skillhub` 是同源双版本，尚未合并；触发时以本目录为准。
 
-### 19.7 发布前自检（v2.1.3）
+### 19.7 发布前自检（v2.1.6）
 
 在 skill 根目录执行：
 
 ```bash
-python3 -m unittest discover -s tests -v     # 31 项 unittest 回归（含本次 P0/P1 负向用例）
+python3 -m unittest discover -s tests -v     # unittest 回归（含 P0-13 负向用例）
 python3 tests/test_segment_and_metrics.py     # 3 项脚本式业务板块用例
 python3 -m py_compile scripts/*.py
 python3 scripts/validate_content.py --selftest
+python3 scripts/check_html.py 报告.html --strict-p1     # 离线静态门禁
+python3 scripts/verify_links.py 报告.html --strict      # 网络验活，发布前必跑
 ```
 
-- `tests/test_segment_and_metrics.py`：脚本式业务板块用例；`tests/test_regressions.py`：unittest 回归用例。
-- 门禁负向用例必须保留：`check_html.py` 的 P1-1 / P1-2 曾因 `body` 变量被内联库源码覆盖而恒真通过，回归用例用真实子进程验证「坏输入确实被报出」。
+- `tests/test_segment_and_metrics.py`：脚本式业务板块用例；`tests/test_regressions.py`：v2.1.3 回归（31 项）；`tests/test_sources.py`：v2.1.4 来源门禁回归（32 项）；`tests/test_tables.py`：v2.1.5/2.1.6 表格排版与 P0-14 负向回归（45 项）。全量 `unittest discover` 合计 **108 项**。
+- 门禁负向用例必须保留：`check_html.py` 的 P1-1 / P1-2 曾因 `body` 变量被内联库源码覆盖而恒真通过；P0-13 之前完全没有来源门禁；P0-14 之前没有一条门禁检查列宽；v2.1.6 之前没有一条门禁检查「th 与 td 列类一致」，导致 31/31 张表表头与数据左右混排。四组回归都用真实子进程验证「坏输入确实被报出」。
+- 视觉验收不能只量溢出：v2.1.5 只量 `scrollWidth` 就宣布全绿，漏掉了同列混排。**发布前必须按 1440 视口生成全部表格截图逐张自查**，量测同列 `text-align` 一致性与表头/数据锚点偏移（≤6px），并人工看总览图。
+- `verify_links.py` 的 `probe()` 必须保留 HEAD 失效 → `GET + Range` 复核，否则东财 F10 这类 HEAD 403 / GET 200 的页面会被误报坏链。
 - 商店版可不带 `assets/qr-*.png`：`brand.json` 已内嵌两张二维码 base64，`qr_data_uri()` 优先读 base64、回退读源图。
+
+### 19.8 表格排版规范（v2.1.6 · P0 强制）
+
+**事故 1（v2.1.5）**：长江电力成品 31 张表全部是裸 `<table>` + 默认 `table-layout:auto`。中文可在任意字间断行，浏览器把「年份 / 状态 / 事实」这类短列压到 1 字宽，出现「已/闭/环」「分/红/承/诺」「川/投/能/源」竖排；9 列数据表与 7 列六元组表则挤在 944px 正文宽度里。`.table-scroll` 的 `min-width:640px` 挡不住——它只给滚动容器，列宽仍由浏览器自由分配。
+
+**事故 2（v2.1.6）**：v2.1.5 按「逐单元格」判定数字列，且 `<th>` 完全不打语义类。同列里「862.42↗」带角标不算数字（左对齐）、「844.92」算数字（右对齐），表头一律左对齐 → **31/31 张表同列 left/right 混排、表头与数据中心最大偏移 165px**。列宽合格不等于对齐合格；只量 `scrollWidth` 的自检必然漏报。
+
+**唯一出稿链**：`render_report.py:enhance_tables(main)` 在 `build()` 内对整段正文统一处理，幂等。生成者**不得**手写 `<colgroup>`、`style="width:..."` 或 `table-layout`。
+
+| 步骤 | 规则 |
+|------|------|
+| 1. 拆解 | 先剥离已有 `.table-wrap table-scroll` 包裹，再统一重包一层，避免嵌套；`script` / `style` / 注释先暂存 |
+| 2. 测量 | 每列收集所有 `<td>` / `<th>` 纯文本视觉长度（CJK=1 / ASCII=0.55），跳过 `colspan` 单元格 |
+| 3. 定权 | 取 `max(p75, max×0.8)` 夹到 `[12, 32]`；含 `.src-tag` / `.status-badge` 的列 +3；**年份 / 期间首列**改用专用权重 `COL_W_YEAR=7.5`（4~6 列短表 `6.2`），含「2016—2017」区间时按最长值放宽但不超过 12 |
+| 4. 出宽 | 权重归一化写入 `<colgroup>` 百分比列宽，合计精确 100%；`min-width = max(680, Σw×6 + 列数×24)px`。v2.1.6 收紧系数后 9 列宽表完整落在 862px 正文内，末列不再被横裁；仅 28 行六元组表保留横滚 |
+| 5. 标格 | **按整列判定**，同一组类同时打到 `<th>` 与全部 `<td>`：≥50% 数据单元格是数值或短数值串 → `num`（ISO 日期 `2026-11-09` 排除）；首列 → `cell-key`；年份列 → `cell-year`；整列最长 ≤7 视觉字符 → `cell-tight`（nowrap，仅此类可锁）；徽章列 → `cell-status`。阈值放宽到 8/12 会把「+2.07% / +6.18%」锁成不换行并撑破数字列 |
+| 6. 表头括注 | 表头里 ≤8 字符的短括注（如 `(亿元)`、`(标准口径)`）包 `<span class="unit">` 并 `white-space:nowrap`，禁止拆成「财务费用(亿」+「元)」 |
+| 7. 分类 | 表头含「异常点」→ `table-anomaly`；≥7 列 → `table-wide`；其余 → `table-data` |
+
+**CSS 契约**（`assets/sevenstep-adapt.css`）：`table-layout:fixed`；`tbody td{text-align:left}` 打底（压过 hydro-base/skin 的 `start`）；`.data-table thead th.num` 与 `tbody td.num` 都右对齐 + `tabular-nums`；`.cell-key` 强制左对齐（年份列是标签，不是数值）；`.cell-year` 窄字号 + 等宽数字；`.src-tag{white-space:nowrap}`（徽章绝不拆行）；仅 `td.num.cell-tight` 允许 `white-space:nowrap`；`thead th .unit{white-space:nowrap}`；`code` / `a.ref` 允许 `overflow-wrap:anywhere`；宽表走 `.table-scroll` 横向滚动且滚动条可见；表头 `white-space:normal` 不溢出。
+
+**图表数字标签**：`BOOT` 统一 `anchor:'end' + align:'top' + offset:3 + clamp:false + layout.padding.top=22`；`relax_bar_headroom()` 给无显式 `max` 的柱状图 y 轴加 `grace:'12%'`。禁止把标签画进柱体内部（图16 的 61.67% / 40.52% 曾互相压叠、291.13% 贴顶被裁）。`harden_null_formatters()` 仍最后生效，null 安全不受影响。
+
+**P0-14 门禁**（`check_html.py`）：逐表验 `data-table`、`<colgroup>`、col 数 = th 数、宽度合计 100%±0.5、`min-width`；**逐列比对 `th` 与首行 `td` 的 `num` / `cell-key` / `cell-year` / `cell-tight` / `cell-status` 集合，不一致即报「同列会左右混排」**；验 CSS 八条关键规则；验 BOOT 的 `align='top'` 与 `padding.top=22`。任一项缺失即拒绝出稿。回归：`tests/test_tables.py` 45 项（含列级对齐、角标数字列、年份窄列、ISO 日期、表头括注、宽表不裁末列与负向门禁用例）。
 
 ---
 

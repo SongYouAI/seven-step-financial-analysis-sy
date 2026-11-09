@@ -112,9 +112,17 @@ BOOT = r"""/* ===== 图表渲染引导（离线自包含 · HYDRO PAPER） =====
     Chart.defaults.borderColor = __dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
     if(Chart.defaults.scale) Chart.defaults.scale.grid.color = __dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
     Chart.defaults.plugins.datalabels.color = __dark ? '#c3cbd0' : '#12181c';
-    Chart.defaults.plugins.datalabels.font.size=11;
+    /* v2.1.5：默认 align:'center' + anchor:'end' 会把标签画进柱体内部，
+       分组柱状图（图16）相邻标签因此互相压叠。统一移到柱顶外侧。 */
+    Chart.defaults.plugins.datalabels.font.size=10;
+    Chart.defaults.plugins.datalabels.font.weight=600;
     Chart.defaults.plugins.datalabels.anchor='end';
-    Chart.defaults.plugins.datalabels.clamp=true;
+    Chart.defaults.plugins.datalabels.align='top';
+    Chart.defaults.plugins.datalabels.offset=3;
+    Chart.defaults.plugins.datalabels.clamp=false;
+    if(!Chart.defaults.layout.padding || typeof Chart.defaults.layout.padding!=='object')
+      Chart.defaults.layout.padding={};
+    Chart.defaults.layout.padding.top=22;
     window.__years=__YEARS_JSON__;
     /* 语义修正：__yearStart=最旧年，__yearEnd=最新年（左新右旧数组的反直觉坑） */
     window.__yearStart=window.__years[window.__years.length-1];
@@ -186,6 +194,9 @@ DEFAULT = {
     'steps': [], 'chart_scripts': [], 'years': [], 'exp_span': '最新A→E3三年复合',
     'masthead_no': 'FINANCIAL STATEMENT NOTE · NO. 01',
     'hero_overline': 'SEVEN-STEP ANALYSIS',
+    # v2.1.4 来源可核查契约（对标八维 sources / sources_html / link_patches）
+    'sources': {}, 'step_sources': [], 'source_meta': {},
+    'link_patches': [], 'sources_html': '',
 }
 
 
@@ -195,6 +206,123 @@ DEFAULT = {
 def esc(s):
     return (str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             .replace('"', '&quot;'))
+
+
+# ── 来源与角标（v2.1.4 · 移植自八维 render_report.py L74–108）──────────
+def ref(sources, key):
+    """可点击来源角标。图标用 ↗（U+2197）而非 🔗：后者在 P1-1 emoji 范围内。
+
+    URL 与 title 必须转义；含 & 的查询参数不转成 &amp; 会截断 href 属性。
+    """
+    s = sources.get(key) if isinstance(sources, dict) else None
+    if not s or not s.get('url'):
+        return ''
+    return ('<a class="ref" href="%s" target="_blank" rel="noopener" '
+            'title="%s">↗</a>'
+            % (esc(s['url']), esc(s.get('title') or key)))
+
+
+def SRC(sources, key):
+    s = sources.get(key, {}) if isinstance(sources, dict) else {}
+    return esc(s.get('title') or key) + ' ' + ref(sources, key)
+
+
+def apply_link_patches(frag, step_no, patches, sources):
+    """给正文关键数字补来源角标（对标八维 link_patches）。
+
+    八维历史事故：补链脚本命中 <script>/<style>/注释 或标签属性里的同名字串，
+    会破坏 JS 语法与 HTML 结构。这里先整段 stash 受保护区域，再校验命中点
+    落在标签外文本中，且后面没有已存在的角标。
+    """
+    todo = [p for p in (patches or []) if int(p.get('step') or 0) == step_no]
+    if not todo:
+        return frag
+    keep = []
+
+    def stash(m):
+        keep.append(m.group(0))
+        return '\x00%d\x00' % (len(keep) - 1)
+
+    s = re.sub(r'<script\b.*?</script>|<!--.*?-->|<style\b.*?</style>',
+               stash, frag, flags=re.S | re.I)
+    for p in todo:
+        needle, r = p.get('after'), ref(sources, p.get('src'))
+        if not needle or not r:
+            continue
+        idx = s.find(needle)
+        if idx < 0:
+            continue
+        lt, gt = s.rfind('<', 0, idx), s.rfind('>', 0, idx)
+        if lt > gt:                       # 命中点落在标签属性内部
+            continue
+        if s[idx + len(needle):idx + len(needle) + 80].lstrip().startswith('<a class="ref"'):
+            continue
+        s = s[:idx + len(needle)] + r + s[idx + len(needle):]
+    for i, block in enumerate(keep):
+        s = s.replace('\x00%d\x00' % i, block)
+    return s
+
+
+def step_source_box(cfg, i):
+    """每步末尾的来源框：来源名 + 可点击角标 + 状态徽章 + 汇总跳转。"""
+    sources = cfg.get('sources') or {}
+    ss = cfg.get('step_sources') or []
+    keys = ss[i] if i < len(ss) else []
+    if not keys:   # 未显式配置时按 sources[].step_refs 反查
+        keys = [k for k, v in sources.items() if i + 1 in (v.get('step_refs') or [])]
+    if not keys:
+        return ''
+    parts = []
+    for k in keys:
+        s = sources.get(k) or {}
+        label = s.get('org') or s.get('title') or k
+        parts.append('%s %s' % (esc(label), ref(sources, k) or
+                                '<span class="src-offline">无公开链接</span>'))
+    return ('<div class="source-box"><div class="sb-title">数据来源'
+            '<span class="status-badge status-resolved">已验证</span></div>'
+            '<p>%s</p><a href="#src-summary">↗ 核查来源汇总（六元组）</a></div>\n'
+            % ' · '.join(parts))
+
+
+def build_source_summary(cfg):
+    """文末六元组来源汇总区；不用 .step-card，避免撞 P0-7 的 9 步硬编码。"""
+    sources = cfg.get('sources') or {}
+    meta = cfg.get('source_meta') or {}
+    fetched = meta.get('fetched_at') or ''
+    checked = meta.get('online_checked') or {}
+    n_ok = sum(1 for v in checked.values() if v)
+    n_all = len(checked) or 6
+    rows = []
+    for key, s in sources.items():
+        link = (ref(sources, key) if s.get('url') else
+                '<span class="src-offline">无公开链接</span>')
+        rows.append(
+            '<tr><td>%s</td><td>%s</td><td>%s<br><span class="src-org">%s · %s</span></td>'
+            '<td>%s</td><td>%s</td><td>%s</td></tr>'
+            % (esc(s.get('value') or '—'), esc(s.get('caliber') or '—'),
+               esc(s.get('title') or key), esc(s.get('org') or '—'),
+               esc(s.get('published_at') or '—'), link,
+               esc(s.get('fetched_at') or fetched or '—'),
+               esc(s.get('level') or 'L4')))
+    if not rows:
+        rows.append('<tr><td colspan="6">未登记来源</td></tr>')
+    return (
+        '<div id="src-summary" class="src-summary">\n'
+        '<div id="source-meta" data-fetched-at="%s" data-tier="%s" '
+        'data-online-checked="%d/%d"></div>\n'
+        '<h3>数据来源汇总 · 六元组登记</h3>\n'
+        '<p>本轮联网核实 %d/%d 类，抓取日期 %s。每条来源按「数值 / 口径 / 页面标题 / '
+        '发布日期 / 可核查链接 / 抓取日期」登记；点击角标可跳转原始页面，'
+        '按四级颗粒度抽查能否直接找到被引数字。验活只判链接能否打开，不判页面内容。</p>\n'
+        '<div class="table-wrap table-scroll"><table class="src-table">'
+        '<thead><tr><th>数值 / 用途</th><th>口径</th><th>页面标题 · 发布日期</th>'
+        '<th>可核查链接</th><th>抓取日期</th><th>颗粒度</th></tr></thead>'
+        '<tbody>%s</tbody></table></div>\n'
+        '<p class="src-foot">六类必查：一致预期 / 行情估值时点 / 最新公告 / '
+        '分红承诺 / 同行指标 / 行业口径。本地 output.csv 为主数据源，'
+        '联网核实用于交叉复核与新鲜度校验，不替代原始表。</p>\n</div>\n'
+        % (esc(fetched), esc(meta.get('tier') or cfg.get('tier') or ''),
+           n_ok, n_all, n_ok, n_all, esc(fetched or '—'), ''.join(rows)))
 
 
 def clean(s):
@@ -226,6 +354,277 @@ def clean(s):
 
 def strip_tags(s):
     return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', s)).strip()
+
+
+# ---------------------------------------------------------------------------
+# 表格排版（v2.1.5）：内容感知列宽，根治中文表格被压成竖排
+#
+# 事故背景：正文表格是裸 <table> + 默认 table-layout:auto。中文可在任意字间
+# 断行，浏览器把「年份 / 状态 / 事实」这类短列压到 1~2 字宽，出现「已/闭/环」
+# 「分/红/承/诺」竖排；9 列数据表与 7 列六元组表则全部挤在 944px 正文宽度里。
+# 只加滚动容器或 min-width 都无效：列宽仍由浏览器自由分配。必须显式给列宽。
+# ---------------------------------------------------------------------------
+TABLE_BLOCK_RE = re.compile(r'<table\b([^>]*)>(.*?)</table>', re.S | re.I)
+CELL_RE = re.compile(r'<t[dh]\b([^>]*)>(.*?)</t[dh]>', re.S | re.I)
+ROW_RE = re.compile(r'<tr\b[^>]*>(.*?)</tr>', re.S | re.I)
+NUM_RE = re.compile(
+    r'^[+\-−]?[\d,]+(?:\.\d+)?\s*'
+    r'(?:[%％]|亿元|万元|亿股|万股|元|亿|万|pct|次|天|倍|x)?$')
+# 下限 12 保证日期 / 徽章 / 年份列不被长文本列挤成竖排；上限 32 防止
+# 单个超长「依据」列吃掉全部宽度（六元组表曾出现 27% vs 6% 的失衡）。
+COL_W_MIN, COL_W_MAX = 12.0, 32.0
+# v2.1.6：年份 / 期间首列专用权重。4 位年份只占 4 个视觉字符，通用下限 12
+# 会把它撑到 140px（实测异常点表 142px），长文本「依据」列反而被挤窄。
+COL_W_YEAR = 7.5
+# 4~6 列的短表（典型：异常点三态闭环）年份列可以更紧；7 列以上宽表
+# 列本身已很窄，年份列再压会与相邻数字列贴在一起。
+COL_W_YEAR_NARROW = 6.2
+YEAR_HEAD_RE = re.compile(r'^(年份|年度|期间|报告期|财年|时间|日期)')
+YEAR_VAL_RE = re.compile(r'^(19|20)\d{2}(?:[—\-–~至]\s*(?:19|20)?\d{2,4})?$')
+NUMISH_RE = re.compile(r'^[+\-−]?\d')
+# ISO 日期是标签，不是数值：宽松的数值判定不能把「2026-11-09」列右对齐，
+# 否则与相邻「↗」「L3」标签列的左对齐语义冲突。
+ISO_DATE_RE = re.compile(r'^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$')
+# 表头里的单位 / 口径括注必须整体换行，不能被拆成「财务费用(亿」+「元)」。
+# 只包短括注（≤8 字符、不含斜杠），避免把「差异来源（模式 / 阶段 / 口径）」
+# 这类长表头锁成不可断行而溢出。
+UNIT_RE = re.compile(r'(\([^()<>/]{1,8}\)|（[^（）<>/]{1,8}）)')
+
+
+def _visual_len(t):
+    """CJK / 中文标点记 1，ASCII 记 0.55；用于估算列所需宽度。"""
+    n = 0.0
+    for ch in t:
+        if ch.isspace():
+            continue
+        n += 0.55 if ord(ch) < 0x2E80 else 1.0
+    return n
+
+
+def _p75(vals):
+    if not vals:
+        return 0.0
+    s = sorted(vals)
+    return s[int((len(s) - 1) * 0.75)]
+
+
+def _table_cols(inner):
+    """返回 (列数, 每列视觉长度样本, 徽章列集合)。colspan 单元格不参与测量。"""
+    rows = [CELL_RE.findall(r) for r in ROW_RE.findall(inner)]
+    rows = [r for r in rows if r]
+    if not rows:
+        return 0, [], set()
+    plain = [len(r) for r in rows
+             if not any(re.search(r'colspan', a, re.I) for a, _ in r)]
+    n = max(plain) if plain else len(rows[0])
+    cols = [[] for _ in range(n)]
+    badge = set()
+    for r in rows:
+        for i, (attrs, cell) in enumerate(r):
+            if i >= n or re.search(r'colspan\s*=\s*["\x27]?[2-9]', attrs, re.I):
+                continue
+            cols[i].append(_visual_len(strip_tags(cell)))
+            if 'src-tag' in cell or 'status-badge' in cell:
+                badge.add(i)
+    return n, cols, badge
+
+
+def _year_column(inner, n):
+    """识别「年份 / 期间」首列，返回 (列号, 最长值视觉长度)。
+
+    表头匹配且 ≥60% 数据行是 4 位年份 / 年份区间才算。只认首列，避免把
+    「2025A / 2026E」这类预测年份表头列误判成窄列。
+    最长值用于动态权重：纯 4 位年份收窄到 COL_W_YEAR；含「2016—2017」
+    区间的表自动放宽，否则 nowrap 会把单元格撑破（实测 1 处溢出）。
+    """
+    rows = [CELL_RE.findall(r) for r in ROW_RE.findall(inner)]
+    rows = [r for r in rows if r]
+    if not n or not rows or not rows[0]:
+        return -1, 0.0
+    if not YEAR_HEAD_RE.match(strip_tags(rows[0][0][1]).strip()):
+        return -1, 0.0
+    vals = [strip_tags(r[0][1]).strip() for r in rows[1:]
+            if r and not re.search(r'colspan', r[0][0], re.I)]
+    if vals and sum(1 for v in vals if YEAR_VAL_RE.match(v)) / len(vals) >= 0.6:
+        return 0, max(_visual_len(v) for v in vals)
+    return -1, 0.0
+
+
+def _column_roles(inner, n):
+    """**整列**判定数值列（v2.1.6）。
+
+    v2.1.5 是逐单元格判定：同一列里「862.42↗」带角标不算数字 → 左对齐，
+    「844.92」算数字 → 右对齐；表头 <th> 更是完全没打类，一律左对齐。
+    结果 31/31 张表同列混排、表头与数据中心最大偏移 165px。
+    这里改为按列统计：≥50% 数据单元格是数值（或短数值串，如
+    「+2.07% / +6.18%」「12.1 元 / 2954 亿」）→ 整列（含表头）都是数值列。
+    """
+    rows = [CELL_RE.findall(r) for r in ROW_RE.findall(inner)]
+    rows = [r for r in rows if r]
+    body = rows[1:] if len(rows) > 1 else []
+    texts = [[] for _ in range(n)]
+    for r in body:
+        for i, (attrs, cell) in enumerate(r):
+            if i >= n or re.search(r'colspan', attrs, re.I):
+                continue
+            texts[i].append(strip_tags(cell).strip())
+    num_cols = set()
+    for i, vals in enumerate(texts):
+        if not vals:
+            continue
+        hits = 0
+        for t in vals:
+            t = t.replace('↗', '').strip()
+            if not t or ISO_DATE_RE.match(t):
+                continue
+            if (NUM_RE.match(t)
+                    or (NUMISH_RE.match(t) and _visual_len(t) <= 22)):
+                hits += 1
+        if hits / len(vals) >= 0.5:
+            num_cols.add(i)
+    return num_cols
+
+
+def _col_pct(cols, badge, year_col=-1, year_len=0.0):
+    """列权重 → 百分比宽度。短列保底、长列封顶、徽章列额外加权。"""
+    w = []
+    for i, vals in enumerate(cols):
+        if i == year_col:
+            # 纯 4 位年份 → 窄权重；年份区间 → 按最长值放宽但不超过通用下限 12
+            base = COL_W_YEAR if len(cols) >= 7 else COL_W_YEAR_NARROW
+            w.append(max(base, min(COL_W_MIN, year_len * 2.0)))
+            continue
+        # 行数少（异常点表常见 4~5 行）时 p75 会退化为最小值，长文本列被
+        # 压回下限 → 依据列反而拿不到宽度。用 max*0.6 托底，仍由上限封顶。
+        v = min(max(_p75(vals), max(vals) * 0.8 if vals else 0,
+                    COL_W_MIN), COL_W_MAX)
+        if i in badge:
+            v += 3.0
+        w.append(v)
+    total = sum(w) or 1.0
+    pct = [x * 100.0 / total for x in w]
+    pct[-1] = round(100.0 - sum(pct[:-1]), 4)      # 合计精确 100%
+    return w, [round(x, 4) for x in pct[:-1]] + [pct[-1]]
+
+
+def _mark_cells(inner, n, cols, badge, num_cols, year_col=-1):
+    """按**列**给 th + td 打同一组语义 class，供 CSS 统一对齐与换行。
+
+    v2.1.6 关键：表头 <th> 必须与同列 <td> 拿到相同的 num / cell-key /
+    cell-year 类，否则「表头左对齐 + 数据右对齐」必然错位。
+    """
+    # 只有「整列最长单元格 ≤7 视觉字符」才允许 nowrap（空白字符不计长度）。
+    # 阈值 12 / 8 都会把「+2.07% / +6.18%」（视觉长度 7.15）或
+    # 「本轮 14.18 元 / 3468.6 亿」锁成不换行并撑破 108px 的数字列。
+    tight = {i for i, vals in enumerate(cols)
+             if vals and max(vals) <= 7.0}
+
+    def row_repl(rm):
+        idx = [0]
+
+        def cell_repl(cm):
+            i = idx[0]
+            idx[0] += 1
+            attrs, cell, whole = cm.group(1), cm.group(2), cm.group(0)
+            if i >= n or re.search(r'colspan', attrs, re.I):
+                return whole
+            cls = []
+            if i == 0:
+                cls.append('cell-key')
+            if i == year_col:
+                cls.append('cell-year')
+            if i in num_cols:
+                cls.append('num')
+            if i in tight:
+                cls.append('cell-tight')
+            if i in badge:
+                cls.append('cell-status')
+            if not cls:
+                return whole
+            mcls = re.search(r'class="([^"]*)"', attrs)
+            if mcls:
+                attrs = (attrs[:mcls.start()] + 'class="%s %s"' %
+                         (mcls.group(1), ' '.join(cls)) + attrs[mcls.end():])
+            else:
+                attrs += ' class="%s"' % ' '.join(cls)
+            is_td = whole.lower().startswith('<td')
+            if not is_td:
+                cell = UNIT_RE.sub(r'<span class="unit">\1</span>', cell)
+            tag = 'td' if is_td else 'th'
+            return '<%s%s>%s</%s>' % (tag, attrs, cell, tag)
+
+        return CELL_RE.sub(cell_repl, rm.group(0))
+
+    return ROW_RE.sub(row_repl, inner)
+
+
+def enhance_tables(frag):
+    """统一增强正文所有表格：列宽受控 + 语义标记 + 滚动容器。
+
+    幂等：已有 data-table 的表格保持原样，只重新统一包裹一层容器。
+    script / style / 注释先暂存，避免补链类事故（八维历史事故）。
+    """
+    keep = []
+
+    def stash(m):
+        keep.append(m.group(0))
+        return '\x00T%d\x00' % (len(keep) - 1)
+
+    s = re.sub(r'<script\b.*?</script>|<style\b.*?</style>|<!--.*?-->',
+               stash, frag, flags=re.S | re.I)
+    # 先拆掉旧包裹，避免重复嵌套；div 内只有 table 时才拆（src-summary / 正文均如此）
+    s = re.sub(r'<div class="table-wrap table-scroll">\s*(<table\b.*?</table>)\s*</div>',
+               r'\1', s, flags=re.S | re.I)
+    s = re.sub(r'<div class="table-scroll">\s*(<table\b.*?</table>)\s*</div>',
+               r'\1', s, flags=re.S | re.I)
+
+    def repl(m):
+        attrs, inner = m.group(1), m.group(2)
+        mcls = re.search(r'class="([^"]*)"', attrs)
+        old_cls = mcls.group(1) if mcls else ''
+        if 'data-table' in old_cls:            # 幂等：已增强过
+            return ('<div class="table-wrap table-scroll">' + m.group(0) + '</div>')
+        n, cols, badge = _table_cols(inner)
+        if not n:
+            return m.group(0)
+        year_col, year_len = _year_column(inner, n)
+        num_cols = _column_roles(inner, n)
+        w, pct = _col_pct(cols, badge, year_col, year_len)
+        head_txt = ' '.join(strip_tags(c) for _, c in
+                            (CELL_RE.findall(ROW_RE.findall(inner)[0])
+                             if ROW_RE.findall(inner) else []))
+        kind = ('table-anomaly' if '异常点' in head_txt else
+                'table-wide' if n >= 7 else 'table-data')
+        cls = (old_cls + ' data-table ' + kind).strip()
+        if mcls:
+            attrs = attrs[:mcls.start()] + 'class="%s"' % cls + attrs[mcls.end():]
+        else:
+            attrs = ' class="%s"' % cls + attrs
+        # v2.1.6：宽表不再被横向裁掉半列。旧系数 (7×权重 + 32×列数) 把
+        # 9 列成本费用表撑到 1012px、7 列历史数字表撑到 922px，在 862px
+        # 正文里末列只露出 1~2 个字，看起来就像「没对齐 / 表格残缺」。
+        # 收紧到 (6×权重 + 24×列数)：9 列 ≈836px 可完整显示；只有超长
+        # 文本六元组表（6 列 ≈936px）仍保留横向滚动，避免长文本被压成 5 行。
+        min_w = int(max(680, sum(w) * 6 + n * 24))
+        ms = re.search(r'style="([^"]*)"', attrs)
+        style = 'min-width:%dpx;' % min_w
+        if ms:
+            attrs = (attrs[:ms.start()] + 'style="%s%s"' %
+                     (ms.group(1).rstrip(';') + ';' if ms.group(1) else '', style)
+                     + attrs[ms.end():])
+        else:
+            attrs += ' style="%s"' % style
+        colgroup = ('<colgroup>' + ''.join(
+            '<col style="width:%s%%">' % ('%g' % p) for p in pct) + '</colgroup>')
+        out = '<table%s>%s%s</table>' % (
+            attrs, colgroup,
+            _mark_cells(inner, n, cols, badge, num_cols, year_col))
+        return '<div class="table-wrap table-scroll">' + out + '</div>'
+
+    s = TABLE_BLOCK_RE.sub(repl, s)
+    for i, block in enumerate(keep):
+        s = s.replace('\x00T%d\x00' % i, block)
+    return s
 
 
 def load_css():
@@ -435,7 +834,7 @@ def build_header(cfg):
     steps = cfg['steps']
     side = ''.join('<a href="#step%d">第%d步 · %s</a>' % (i + 1, i + 1,
                    esc(s.get('short') or STEP_SHORT[i])) for i, s in enumerate(steps))
-    side += '<a href="#appendix">附录 · 数据来源</a>'
+    side += '<a href="#appendix">附录 · 数据来源</a>\n<a href="#src-summary">来源汇总 · 六元组</a>'
     overline = esc(cfg.get('hero_overline') or 'SEVEN-STEP ANALYSIS')
     if cfg.get('industry'):
         overline += ' / ' + esc(cfg['industry'])
@@ -480,7 +879,7 @@ def build_toc(cfg):
     items.append(
         '<div class="toc-item" onclick="document.getElementById(\'appendix\').scrollIntoView({behavior:\'smooth\'})">'
         '<span class="toc-num">10</span><div><span class="toc-t">附录 · 数据来源与校验</span>'
-        '<span class="toc-d">原始表、缺口、免责声明</span></div></div>')
+        '<span class="toc-d">六元组来源汇总、缺口、免责声明</span></div></div>')
     return ('<div class="toc-card"><div class="toc-title">报告导航 · 点击跳转</div>'
             '<div class="toc-grid">' + ''.join(items) + '</div></div>')
 
@@ -490,13 +889,17 @@ def build_steps(cfg):
     for i, s in enumerate(cfg['steps']):
         num = str(i + 1)
         sub = s.get('sub') or ''
+        body = clean(s.get('html', ''))
+        body = apply_link_patches(body, i + 1, cfg.get('link_patches'),
+                                  cfg.get('sources') or {})
         out.append(
             '<div class="step-card" id="step' + num + '">\n'
             '<div class="step-head"><div class="step-num-watermark">' + num.zfill(2) + '</div>\n'
             '<div class="step-head-text"><div class="step-num">STEP ' + num.zfill(2) + ' / 09</div>\n'
             '<div class="step-title">' + esc(s.get('title') or STEP_TITLES[i]) + '</div>'
             '<div class="step-sub">' + esc(sub) + '</div></div></div>\n'
-            '<div class="step-body">' + clean(s.get('html', '')) + '</div>\n</div>\n')
+            '<div class="step-body">' + body + step_source_box(cfg, i) +
+            '</div>\n</div>\n')
     return ''.join(out)
 
 
@@ -506,7 +909,9 @@ def build_steps(cfg):
 # 报告会被多级转发，页脚是唯一稳定的出处锚点。品牌常量集中在 assets/brand.json，
 # 二维码以 data URI 内嵌：离线打开 / 打印 / SkillHub 纯文本分发都不丢图。
 # 本块强制输出，content.json 不能关闭或覆盖（check_html.py P0-9 反向复核）。
-# 与八维版差异：七步门禁 P0-3 禁止任何 http(s) src/href，故不提供 branding.url。
+# 与八维版差异：品牌块不挂外链；来源外链统一走 sources 契约（v2.1.4
+# P0-3 白名单仅放行 <a class="ref" target="_blank" rel="noopener">），
+# 避免品牌导流链接与可核查来源角标混在一起。
 DEFAULT_ATTRIBUTION = '七步财报分析法 · 松幽'
 
 
@@ -610,7 +1015,9 @@ def build_appendix(cfg):
            '<div class="step-head-text"><div class="step-num">APPENDIX / 10</div>\n'
            '<div class="step-title">附录 · 数据口径与校验记录</div>'
            '<div class="step-sub">DATA PROVENANCE · 原始表、缺口与免责声明</div></div></div>\n'
-           '<div class="step-body">' + clean(cfg.get('appendix_html', '')) + '\n</div>\n</div>\n')
+           '<div class="step-body">' + clean(cfg.get('appendix_html', '')) +
+           (cfg.get('sources_html') or build_source_summary(cfg)) +
+           '\n</div>\n</div>\n')
     # brand 溯源条由 build() 单独挂在 </div.main-wrap> 之后，不随附录进主容器。
     # 原因：.main-wrap 与 .report-footer 各自带 padding-left:248px（宽屏给侧栏让位），
     # 若 footer 嵌在 main-wrap 内，248px 会叠加两次，页脚相对正文右移 248px。
@@ -700,11 +1107,30 @@ def harden_null_formatters(scripts):
     return out
 
 
+def relax_bar_headroom(scripts):
+    """柱状图 y 轴顶部留白（v2.1.5）。
+
+    标签移到柱顶外侧后，若 y 轴自动 max 正好贴住最高柱（图16 的 291.13%
+    对应 300% 顶格），标签会被裁掉。grace 只加在没有显式 max 的图上，
+    不改动任何数值、不新增数据点，且不触碰 null 安全的 formatter。
+    """
+    out = []
+    for s in scripts or []:
+        compact = s.replace(' ', '')
+        if (("type:'bar'" in compact or 'type:"bar"' in compact)
+                and 'max:' not in s and 'grace' not in s):
+            s = re.sub(r'(scales\s*:\s*\{\s*y\s*:\s*\{)',
+                       lambda m: m.group(1) + "grace:'12%',", s, count=1)
+        out.append(s)
+    return out
+
+
 def build_scripts(cfg):
     years = cfg.get('years') or []
     boot = (BOOT.replace('__YEARS_JSON__', json.dumps(years, ensure_ascii=False))
                 .replace('__EXP_SPAN__', cfg.get('exp_span') or '最新A→E3三年复合'))
-    regs = harden_null_formatters(normalize_chart_colors(cfg['chart_scripts']))
+    regs = relax_bar_headroom(
+        harden_null_formatters(normalize_chart_colors(cfg['chart_scripts'])))
     # 内联顺序固定：Chart.js → datalabels → boot(register) → 16 图 __reg → tail
     return (inline_lib('chart.umd.min.js') +
             inline_lib('chartjs-plugin-datalabels.min.js') +
@@ -783,6 +1209,9 @@ def build(cfg, css):
     main = ('<div class="main-wrap">\n' + build_toc(cfg) + '\n' + exec_block +
             '<div id="chart-error"></div>\n' + build_steps(cfg) + build_appendix(cfg) +
             '\n</div>\n' + render_brand_footer(cfg))
+    # v2.1.5：正文表格统一列宽治理。只作用于 main，天然不触碰 build_scripts
+    # 里内联的 Chart.js / datalabels 源码（八维历史补链事故同类风险）。
+    main = enhance_tables(main)
     doc = ('<!DOCTYPE html>\n<html lang="zh-CN" data-theme="light">\n' +
            build_head(cfg, css) + '\n<body>\n' + build_header(cfg) + '\n' +
            main + build_scripts(cfg) + '</body>\n</html>\n')
@@ -835,6 +1264,9 @@ def main():
     print('✅ 已生成: %s (%d bytes)' % (out, out.stat().st_size))
     print('   皮肤: HYDRO PAPER v3.0 | 章节: 9 + 附录 | 图表脚本: %d | 年份: %s'
           % (len(cfg['chart_scripts']), cfg.get('years') or '未注入'))
+    print('   来源: %d 条登记 | 本轮联网核实 %s | 汇总锚点 #src-summary'
+          % (len(cfg.get('sources') or {}),
+             (cfg.get('source_meta') or {}).get('fetched_at') or '未留痕'))
 
     if not a.no_check:
         chk = Path(__file__).with_name('check_html.py')

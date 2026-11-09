@@ -53,6 +53,7 @@ html[data-theme="dark"]{
   font-weight:600;letter-spacing:.06em;line-height:1.5;
   padding:1px 6px;margin:0 3px 0 0;border-radius:3px;
   border:1px solid currentColor;vertical-align:1px;
+  white-space:nowrap;flex:none;
 }
 .src-tag.a{color:var(--p-good);} .src-tag.b{color:var(--p-accent);}
 .src-tag.c{color:var(--p-warn);} .src-tag.x{color:var(--p-ink-3);}
@@ -106,6 +107,39 @@ html[data-theme="dark"]{
   font-family:var(--font-serif);font-size:17px;color:var(--p-ink);margin-bottom:8px;
 }
 .chart-empty-note p{margin:0;font-size:13px;line-height:1.85;color:var(--p-ink-2);}
+
+/* v2.1.4 来源可核查：角标 / 状态徽章 / 六元组汇总（对标八维 P0-4） */
+a.ref{
+  display:inline-block;font-family:var(--font-mono);font-size:12px;line-height:1;
+  text-decoration:none;color:var(--p-accent);padding:0 2px;margin:0 1px;
+  vertical-align:1px;border-bottom:1px solid currentColor;
+}
+a.ref:hover{color:var(--p-ink);}
+.status-badge{
+  display:inline-block;font-family:var(--font-mono);font-size:10px;font-weight:600;
+  letter-spacing:.06em;line-height:1.5;padding:1px 7px;margin-left:10px;
+  border-radius:3px;border:1px solid currentColor;vertical-align:2px;
+}
+.status-resolved{color:var(--p-good);}
+.source-box a[href^="#"]{
+  color:var(--p-accent);font-size:12px;text-decoration:none;
+  border-bottom:1px solid currentColor;
+}
+#source-meta{display:none;}
+.src-summary{margin:34px 0 8px;padding-top:26px;border-top:1px solid var(--p-line);}
+.src-summary h3{
+  font-family:var(--font-serif);font-size:18px;color:var(--p-ink);margin:0 0 12px;
+}
+.src-summary p{font-size:13px;line-height:1.85;color:var(--p-ink-2);margin:10px 0;}
+.src-summary .table-scroll{margin:16px 0;}
+.src-table{min-width:900px;font-size:12px;}
+.src-table th{font-size:11px;letter-spacing:.06em;white-space:nowrap;}
+.src-table td{vertical-align:top;line-height:1.7;}
+.src-org,.src-offline{
+  font-family:var(--font-mono);font-size:10.5px;color:var(--p-ink-3);
+}
+.src-foot{font-size:12px !important;color:var(--p-ink-3) !important;}
+@media print{a.ref{color:var(--p-ink);border:0;}}
 
 /* ── 页脚 brand 溯源条（v2.1.0 从八维 HYDRO PAPER v3.2.2 移植） ──
    公众号 + 视频号二维码，data URI 内嵌，零远程资源。
@@ -191,4 +225,89 @@ html[data-theme="dark"] .qr-lightbox{background:rgba(6,10,12,.86);}
   .brand-channel-copy{width:128px;}
   .brand-qr{width:48px;}
   .qr-lightbox img{width:min(86vw,360px);}
+}
+
+/* ── v2.1.6 表格排版系统（内容感知列宽 + 列级对齐） ─────────────────
+   渲染链 render_report.py:enhance_tables() 为每张表注入 <colgroup> 百分比
+   列宽、data-table class、min-width，并把 num / cell-tight / cell-status /
+   cell-key / cell-year 按「整列」打到 th + td 上。
+   事故 1（v2.1.5）：裸 table + table-layout:auto，中文短列被压成竖排。
+   事故 2（v2.1.6）：逐单元格判定数字列 + th 不打类 → 同列 left/right 混排、
+   表头与数据中心最大偏移 165px，31/31 张表全中。必须整列统一。 */
+.table-wrap.table-scroll{
+  border:1px solid var(--p-line);border-radius:12px;
+  background:var(--p-surface);overflow-x:auto;
+  scrollbar-width:thin;scrollbar-color:var(--p-line-2) transparent;
+}
+.table-wrap.table-scroll::-webkit-scrollbar{height:8px;}
+.table-wrap.table-scroll::-webkit-scrollbar-track{background:transparent;}
+.table-wrap.table-scroll::-webkit-scrollbar-thumb{
+  background:var(--p-line-2);border-radius:8px;
+}
+.table-wrap.table-scroll table{
+  margin:0;width:100%;border-collapse:separate;border-spacing:0;
+  table-layout:fixed;background:transparent;
+}
+.data-table thead th{
+  padding:11px 12px;font-size:11px;font-weight:600;letter-spacing:.06em;
+  color:var(--p-ink-3);background:var(--p-surface-2);
+  border-bottom:1px solid var(--p-line-2);
+  text-align:left;line-height:1.5;vertical-align:bottom;
+  white-space:normal;overflow-wrap:anywhere;
+}
+/* 数值列表头右对齐时，字距会让末尾多出几像素，与下方数字右边界不齐 */
+.data-table thead th.num{text-align:right;letter-spacing:0;}
+/* 表头括注（单位 / 口径）整体换行：防止「财务费用(亿元)」被拆成
+   「财务费用(亿」+「元)」，9 列宽表列窄时尤其明显 */
+.data-table thead th .unit{white-space:nowrap;display:inline-block;}
+.data-table tbody td{
+  padding:11px 12px;font-size:13px;line-height:1.72;
+  color:var(--p-ink-2);vertical-align:top;
+  border-bottom:1px solid var(--p-line);
+  overflow-wrap:anywhere;word-break:normal;
+  text-align:left;   /* 打底：hydro-base/skin 未显式设置，Chrome 会得到 start */
+}
+/* 列级对齐契约：同一列 th 与所有 td 必须 computed text-align 一致。
+   特异性必须压过 hydro-base.css 的 table thead th / table tbody td.num，
+   也压过本文件下方的 .data-table thead th.num。 */
+.data-table thead th.cell-key,
+.data-table thead th.cell-key.num,
+.data-table tbody td.cell-key.num{text-align:left;}
+.data-table tbody tr:last-child td{border-bottom:0;}
+.data-table tbody tr:nth-child(even) td{background:var(--p-surface-2);}
+.data-table tbody tr:hover td{background:var(--p-surface-3);}
+.data-table tbody td.cell-key{color:var(--p-ink);font-weight:600;}
+.data-table tbody td.cell-tight{white-space:nowrap;}
+/* 数值列：整列右对齐。nowrap 只对「整列最长 ≤7 视觉字符」的纯数字列开放，
+   否则「+2.07% / +6.18%」「12.1 元 / 2954 亿」会被锁死并撑破列（实测 21 处溢出）。 */
+.data-table tbody td.num{
+  text-align:right;font-variant-numeric:tabular-nums;color:var(--p-ink);
+}
+.data-table tbody td.num.cell-tight{
+  font-family:var(--font-mono);font-size:12px;white-space:nowrap;
+}
+/* 首列年份「2023」也是纯数字，但属标签列，应与表头一样左对齐 */
+.data-table tbody td.cell-key.num{text-align:left;font-family:inherit;}
+/* 年份 / 期间首列：专用窄权重 + 略小字号，长年份区间仍可完整显示 */
+.data-table tbody td.cell-year{
+  font-size:12px;font-variant-numeric:tabular-nums;
+  padding-left:10px;padding-right:8px;
+}
+.data-table code{font-size:.88em;overflow-wrap:anywhere;word-break:break-word;}
+.data-table a.ref,.data-table .src-tag{white-space:nowrap;}
+/* 异常点（三态闭环）：状态列可能是「注意：数据缺口（方向：待补…）」长文本，
+   必须允许换行；短状态（徽章 + 已验证）由 .src-tag nowrap 与列宽自然同行。 */
+.data-table.table-anomaly tbody td.cell-status{
+  white-space:normal;font-size:12.5px;
+}
+.data-table.table-anomaly tbody td:last-child{
+  font-size:12.5px;line-height:1.75;
+}
+.data-table.table-wide tbody td{font-size:12.5px;}
+@media(max-width:768px){
+  .data-table tbody td,.data-table thead th{padding:9px 10px;}
+}
+@media print{
+  .table-wrap.table-scroll{overflow:visible;}
+  .data-table{table-layout:fixed;}
 }
