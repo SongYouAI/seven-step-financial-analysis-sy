@@ -16,12 +16,16 @@
   P0-8  静默空图：数据数组为空的图必须有「未披露」提示卡（禁空白坐标轴交付）
   P0-9  作者溯源 brand 区块强制在位：公众号 + 视频号二维码（data URI 内嵌、零远程）
   P0-10 页脚层级：footer.report-footer 必须是 <body> 直接子元素，不得嵌在 .main-wrap 内
+  P0-11 图表库自包含：Chart.js + datalabels 必须整段内联进 HTML，禁止仅靠同目录 assets/
+        （报告会被单独复制/转发；外链本地资源 = 16 张图全空，typeof Chart === undefined）
+  P0-12 16 图的数据标签 formatter 必须 null 安全（缺值按设计填 null 做断点；
+        裸 v.toFixed() 会让 datalabels 抛 TypeError，整张图渲染失败）
   P1-1  正文无 emoji（字体缺字会渲染成豆腐块）
   P1-2  Markdown 残留（**粗体** / |--- 表格分隔 / 未转 <table>）
   P1-3  图表卡 .chart-card / .chart-idx 覆盖率
   P1-4  表格移动端滚动容器 .table-wrap 覆盖率
   P1-5  数据截止时点（YYYY-MM-DD HH:MM 或 YYYY-MM-DD）出现在 Hero
-  P1-6  本地 chart.umd.min.js 与 datalabels 存在
+  P1-6  若仍保留相对 assets/ 引用，则同目录两个 js 必须齐备（v2.1.2 内联后已不再依赖）
 
 退出码：0=通过（可有 P1），1=P0 阻断，2=文件/依赖错误。
 """
@@ -135,6 +139,42 @@ def main():
     if 'cdn.jsdelivr' in t:
         p0.append('P0-3 存在 CDN 兜底分支（本环境不可达）')
 
+    # P0-11 图表库自包含（v2.1.2）：报告会被单独复制/多级转发，
+    # 只靠 <script src="assets/..."> 时，一旦 HTML 离开 assets/ 目录，
+    # typeof Chart === 'undefined'，16 张 canvas 全部只剩空框。
+    inlined = {}
+    for _name, _min in (('chart.umd.min.js', 100000),
+                        ('chartjs-plugin-datalabels.min.js', 8000)):
+        m = re.search(r'<!-- ' + re.escape(_name) +
+                      r' \(inlined, (\d+) bytes\) -->\s*<script>(.*?)</script>', t, re.S)
+        if not m:
+            p0.append('P0-11 图表库 %s 未内联（HTML 非自包含，单独转发会全图空白）' % _name)
+            continue
+        body = m.group(2)
+        real = len(body.encode('utf-8'))
+        if real < _min or int(m.group(1)) < _min:
+            p0.append('P0-11 内联 %s 被截断（声明 %s bytes / 实测 %d bytes）'
+                      % (_name, m.group(1), real))
+        inlined[_name] = real
+    for _name in ('chart.umd.min.js', 'chartjs-plugin-datalabels.min.js'):
+        if 'src="assets/%s"' % _name in t:
+            p0.append('P0-11 仍存在相对引用 src="assets/%s"，报告不可单独转发' % _name)
+
+    # P0-12 数据标签 formatter 必须 null 安全（只检查 16 段 __reg，不误伤内联库）
+    reg_blocks = re.findall(r'<script>\s*window\.__reg\(.*?</script>', t, re.S)
+    unsafe_fmt = []
+    for _b in reg_blocks:
+        _m = re.search(r"__reg\('(chart\d+)'", _b)
+        _cid = _m.group(1) if _m else '?'
+        if re.search(r'formatter\s*:\s*(?:v\s*=>\s*v\.toFixed|'
+                     r'function\s*\(\s*v\s*\)\s*\{\s*return\s+v\.toFixed)', _b):
+            unsafe_fmt.append(_cid)
+    if unsafe_fmt:
+        p0.append('P0-12 %d 张图的 formatter 未做 null 保护：%s（缺值填 null 时整图渲染失败）'
+                  % (len(unsafe_fmt), ', '.join(unsafe_fmt)))
+    null_points = len(re.findall(r'\bdata\s*:\s*\[[^\]]*\bnull\b',
+                                 '\n'.join(reg_blocks)))
+
     # P0-4 三层皮肤
     for sid in ('hydro-base', 'hydro-skin', 'sevenstep-adapt'):
         if 'id="%s"' % sid not in t:
@@ -241,17 +281,18 @@ def main():
     if not re.search(r'\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?', hero):
         p1.append('P1-5 Hero 未见数据截止时点（YYYY-MM-DD [HH:MM]）')
 
-    # P1-6 本地图表库
+    # P1-6 相对 assets/ 引用（v2.1.2 起已内联，正常应为 0；保留兼容旧流程）
     assets = p.parent / 'assets'
-    for name in ('chart.umd.min.js', 'chartjs-plugin-datalabels.min.js'):
-        if not (assets / name).exists():
-            p1.append('P1-6 本地 assets/%s 缺失' % name)
+    if 'src="assets/' in t:
+        for name in ('chart.umd.min.js', 'chartjs-plugin-datalabels.min.js'):
+            if not (assets / name).exists():
+                p1.append('P1-6 引用了 assets/%s，但同目录文件缺失' % name)
 
     # ---- 汇总 ----
     print('\n=== HTML 交付门禁: %s ===' % p.name)
-    print('  体积 %d bytes | step-card %d | canvas %d | __reg %d | chart-card %d | table %d | 空图提示 %d/%d | 二维码 %d'
+    print('  体积 %d bytes | step-card %d | canvas %d | __reg %d | chart-card %d | table %d | 空图提示 %d/%d | 二维码 %d | 内联图表库 %d/2 | null断点 %d'
           % (p.stat().st_size, n_steps, len(canvases), len(regs), n_chart_card,
-             n_table, len(noted), len(empty_ids), n_qr_img))
+             n_table, len(noted), len(empty_ids), n_qr_img, len(inlined), null_points))
     for x in p0:
         print('  ❌ ' + x)
     for x in p1:

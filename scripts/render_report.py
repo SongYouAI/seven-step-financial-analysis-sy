@@ -16,8 +16,11 @@
   C. 旧版换肤：  --from-html <旧成品.html> [--data overrides.json]
      从既有七步报告抽取 9 步正文 / 执行摘要 / 附录 / 16 图脚本，只换版式，数值零改动。
 
-输出：<out> 指定的最终 HTML，并在同级目录补齐 assets/（本地 Chart.js）。
-默认调用 check_html.py 做交付门禁，--no-check 可跳过。
+输出：<out> 指定的**自包含单文件 HTML**：三层 CSS、Chart.js 4.4.1、
+chartjs-plugin-datalabels 2.2.0、两张二维码全部内联，零远程资源、零同目录依赖。
+报告会被多级转发或单独复制，只要落下一个 HTML 就必须能看图（v2.1.2 起硬约束）。
+默认仍在同级目录补齐 assets/（仅作旧流程兼容），--no-assets 可关闭。
+默认调用 check_html.py 做交付门禁（含 P0-11 自包含校验），--no-check 可跳过。
 
 用法示例：
   python3 render_report.py --data content.json --out 长飞光纤_七步财报分析报告.html
@@ -112,7 +115,7 @@ BOOT = r"""/* ===== 图表渲染引导（离线自包含 · HYDRO PAPER） =====
     window.__charts.forEach(function(x){ renderChart(x[0],x[1]); });
   }
   if(typeof Chart==='undefined'){
-    showChartError('图表库未加载：请确认本报告同目录存在 assets/ 文件夹（chart.umd.min.js 与 chartjs-plugin-datalabels.min.js）。');
+    showChartError('图表库未加载：本报告应自包含 Chart.js（v2.1.2+），请确认 HTML 未被截断，并用最新版 skill 重新生成。');
   } else { boot(); }
 })();"""
 
@@ -582,13 +585,65 @@ def normalize_chart_colors(scripts):
     return out
 
 
+def inline_lib(name):
+    """把 skill 自带的图表库整段内联进 HTML（v2.1.2 · 自包含硬约束）。
+
+    v2.1.1 及以前用 <script src="assets/...">，报告一旦被单独复制/转发就全图空白
+    （typeof Chart === 'undefined'，16 张 canvas 只留空框）。报告是可多级转发的
+    交付物，不能依赖同目录资源，故改为内联固定版本，零远程、零同目录依赖。
+    """
+    src = ASSETS / name
+    if not src.is_file():
+        sys.exit('❌ 本地图表库缺失: %s' % src)
+    code = src.read_text(encoding='utf-8')
+    n = len(code.encode('utf-8'))
+    if n < 10000:
+        sys.exit('❌ %s 体积异常（%d bytes），拒绝内联' % (name, n))
+    for bad in ('</script', '<!--', '<script'):
+        if bad in code.lower():
+            sys.exit('❌ %s 含 %s 字面串，内联会截断 HTML 文档' % (name, bad))
+    return ('<!-- %s (inlined, %d bytes) -->\n<script>\n%s\n</script>\n'
+            % (name, n, code.rstrip()))
+
+
+def harden_null_formatters(scripts):
+    """把 16 图的数据标签 formatter 改成 null 安全（v2.1.2 · P0-12）。
+
+    build_report_data.py 的设计原则是「缺数据填 null 让图表自动断点，不编造」，
+    但旧的 formatter 直接 `v.toFixed(1)+'%'`：Chart.js 的 datalabels 仍会为 null
+    数据点调用 formatter，抛 `TypeError: Cannot read properties of null`，
+    **整张图渲染失败**（实测 A 股 ONLINE 无一致预期时图6 全白）。
+    这里只加固 16 段图脚本，不触碰内联的 Chart.js 库内部 formatter。
+    """
+    guard = "(v===null||v===undefined||isNaN(v))?'':"
+    out = []
+    for s in scripts or []:
+        # 形式1: formatter:v=>v.toFixed(N)+'单位'
+        s = re.sub(
+            r"formatter\s*:\s*v\s*=>\s*v\.toFixed\((\d+)\)\s*\+\s*('[^']*')",
+            lambda m: 'formatter:v=>' + guard + 'Number(v).toFixed(%s)+%s'
+                      % (m.group(1), m.group(2)), s)
+        # 形式2: formatter:function(v){return v.toFixed(N)+'单位';}
+        s = re.sub(
+            r"formatter\s*:\s*function\s*\(\s*v\s*\)\s*\{\s*return\s+v\.toFixed\((\d+)\)\s*\+\s*('[^']*')\s*;\s*\}",
+            lambda m: 'formatter:function(v){return ' + guard
+                      + 'Number(v).toFixed(%s)+%s;}' % (m.group(1), m.group(2)), s)
+        # 形式3: formatter:(v,i)=>[v+'%',v+'次',v+'x'][i]（图14 多单位）
+        s = re.sub(
+            r"formatter\s*:\s*\(\s*v\s*,\s*i\s*\)\s*=>\s*(\[[^\]]*\]\s*\[\s*i\s*\])",
+            lambda m: 'formatter:(v,i)=>' + guard + '(%s)' % m.group(1), s)
+        out.append(s)
+    return out
+
+
 def build_scripts(cfg):
     years = cfg.get('years') or []
     boot = (BOOT.replace('__YEARS_JSON__', json.dumps(years, ensure_ascii=False))
                 .replace('__EXP_SPAN__', cfg.get('exp_span') or '最新A→E3三年复合'))
-    regs = normalize_chart_colors(cfg['chart_scripts'])
-    return ('<script src="assets/chart.umd.min.js"></script>\n'
-            '<script src="assets/chartjs-plugin-datalabels.min.js"></script>\n'
+    regs = harden_null_formatters(normalize_chart_colors(cfg['chart_scripts']))
+    # 内联顺序固定：Chart.js → datalabels → boot(register) → 16 图 __reg → tail
+    return (inline_lib('chart.umd.min.js') +
+            inline_lib('chartjs-plugin-datalabels.min.js') +
             '<script>\n' + boot + '\n</script>\n' + '\n'.join(regs) +
             '\n' + TAIL + '\n' + QR_LIGHTBOX_JS + '\n')
 
@@ -689,7 +744,8 @@ def main():
     ap.add_argument('--prefilled', help='report_prefilled.html：自动抽取 16 图脚本与年份轴')
     ap.add_argument('--out', required=True, help='最终 HTML 输出路径')
     ap.add_argument('--no-check', action='store_true', help='跳过 check_html.py 门禁')
-    ap.add_argument('--no-assets', action='store_true', help='不拷贝 assets/（调试用）')
+    ap.add_argument('--no-assets', action='store_true',
+                    help='不在同目录补齐 assets/（v2.1.2 起图表库已内联，此拷贝仅作旧流程兼容）')
     a = ap.parse_args()
 
     cfg = dict(DEFAULT)

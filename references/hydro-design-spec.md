@@ -1,5 +1,5 @@
 ---
-version: 1.4
+version: 1.5
 name: seven-step-hydro-paper-adaptation
 description: 七步财报分析复用的 HYDRO PAPER v3.0 皮肤规格与适配层约定。同源完整规格见八维行业分析 skill 的 references/hydro-design-spec.md。
 status: 默认版式；取代七步模板自带的深蓝金棕 :root 表现（结构与类名不变）
@@ -16,6 +16,7 @@ status: 默认版式；取代七步模板自带的深蓝金棕 :root 表现（�
 
 > v2.1.0 更新：页脚 brand 区块已按八维 v3.2.2 移植，不再列作差异；实现细节见 `SKILL.md §19.5.1`。
 > v2.1.1 更新：补齐 **DOM 层级契约** —— 只搬 CSS 不搬结构会导致页脚双重左偏移，详见 §4 与 §6 的 P0-10。
+> v2.1.2 更新：补齐 **资源自包含契约** —— 图表库不再走同目录 `assets/`，改为整段内联进 HTML，详见 §5 与 §6 的 P0-11；并修复 null 断点导致的数据标签崩图，详见 §5 与 §6 的 P0-12。
 
 | 项 | 八维版 | 七步版 |
 |---|---|---|
@@ -78,7 +79,8 @@ Hero 结构：`.hero` + `.hero-art`（等高线 SVG，标签年份由 `years` �
 - **图12 人均**：`build_headcount.py` 写出的已是万元，`build_report_data.py` 必须 `as_is()` 原样透传，再 `to_wan()` 会缩小一万倍。
 - **图16 同行**：`--peer peer_comparison.csv` 自动注入；缺文件时 `build_report_data.py` 写 `labels:[]` + 3 个 `data:[]`（**不可留 `{{CHART16_*}}` 占位符**，否则 P0-1 + 内联 JS 语法错误），由空图提示卡接管；补齐后重新生成自动出图。
 - 图表色板由适配层 `--chart-1..6` 提供，boot 脚本读成 `window.__c`；脚本里的 emoji、旧 hex（`#1e5fb4` 等）由 `normalize_chart_colors()` 统一替换。
-- 图表库只认同目录 `assets/chart.umd.min.js` + `chartjs-plugin-datalabels.min.js`，**无 CDN 兜底**。
+- **图表库自包含（v2.1.2）**：`render_report.py` 的 `inline_lib()` 把 Chart.js 4.4.1 + datalabels 2.2.0 整段内联进 HTML，**无 CDN 兜底、无同目录依赖**。验收方式：把 HTML 放进完全没有 `assets/` 的空目录，真实浏览器下 `typeof Chart === 'function'` 且 16/16 canvas 真实着色、console 0 错误。v2.1.1 及以前用 `<script src="assets/...">`，单独复制报告即 16 图全空。
+- **null 断点安全（v2.1.2）**：缺值按设计填 `null`（不编造、不插值），但 datalabels 仍会为 null 点调用 formatter；`harden_null_formatters()` 把 3 种 formatter 写法统一改成 null 安全，避免 `v.toFixed()` 抛 TypeError 让整张图渲染失败（实测 A 股 ONLINE 图6）。P0-12 只扫 16 段 `__reg`，不误伤内联库内部 formatter。
 - **禁交付空白坐标轴**：缺 `segment_revenue.csv` / `headcount` / `peer_comparison.csv` 时生成器会写 `names=[]` / `series=[]` / `data:[]` / `labels:[]`，Chart.js 仍画出一套空轴。`render_report.py` 的 `mark_empty_charts()` 会把这类图换成 `.chart-empty-note`（`FIG.NN · 未披露` + 「本图数据未取得」），canvas 置 `hidden` 以维持 16 ↔ 16 契约；**不插值、不编造**。提示卡说明文案按图号区分（图16 = 同行可比数据，其余 = 分业务/员工资料）。样式在适配层，门禁 P0-8 反向校验。
 
 ## 6. 门禁对应（scripts/check_html.py）
@@ -95,13 +97,16 @@ Hero 结构：`.hero` + `.hero-art`（等高线 SVG，标签年份由 `years` �
 | P0-8 | 空数据图（`names=[]` / `series=[]` / `data:[]` / `labels:[]`）必须有对应 `data-chart` 的 `.chart-empty-note` 提示卡（静默空图阻断） |
 | P0-9 | 作者溯源 brand 区块强制在位：brand-block / qrLightbox / 2 个 `.brand-qr` / 2 张 `data:image/png;base64,` / 公众号+视频号标识 |
 | P0-10 | `footer.report-footer` 不得嵌在 `.main-wrap` 内（栈解析判定），必须是 `<body>` 直接子元素；防止页脚双重左偏移 |
-| P1 | emoji / Markdown 残留、`.chart-card` 与 `.table-wrap` 覆盖、Hero 数据截止时点、本地 assets |
+| P0-11 | Chart.js + datalabels 必须整段内联（标记 + 声明字节数 + 实际长度校验），禁止 `src="assets/..."` 相对引用；防止报告单独转发后 16 图全空 |
+| P0-12 | 16 段 `__reg` 的数据标签 formatter 必须 null 安全，禁止裸 `v.toFixed`；防止缺值填 null 时整图崩掉 |
+| P1 | emoji / Markdown 残留、`.chart-card` 与 `.table-wrap` 覆盖、Hero 数据截止时点、相对 assets 引用齐备性（内联后通常为空） |
 
 ## 7. headless 截图坑
 
 `file://报告.html#step4` 在无头 Chrome 里**不会滚动**，直接 `--screenshot` 会白屏（DOM 中图表其实已渲染）。
-`capture.py` 的做法：把目标 section 裁成独立 HTML（复用完整 `<head>` + 全部 `<script>`，
-本地 assets 改绝对 file URI + 覆盖层隐藏侧栏/渐入），再截图。不修改交付文件。
+`capture.py` 的做法：把目标 section 裁成独立 HTML（复用完整 `<head>` + 全部 `<script>` +
+覆盖层隐藏侧栏/渐入），再截图。不修改交付文件。v2.1.2 起图表库已内联在被复用的 `<script>` 里，
+切片页同样不依赖原目录 `assets/`；脚本里的绝对 file URI 替换逻辑保留作旧报告兼容。
 `--section footer` 与 `--all` 已包含页脚 brand 区块，用于二维码目视验收。
 页脚对齐不能只靠截图肉眼判断：用 headless 浏览器取 `.brand-block` 与 `#appendix` 的 `getBoundingClientRect().x`，三档视口差值必须为 0（v2.1.0 实测为 48 / 248 / 248）。
 
