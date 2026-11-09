@@ -19,9 +19,44 @@ import csv
 import sys
 import os
 import json
+import re
 
 
 SK = os.path.dirname(os.path.abspath(__file__))
+
+# 纯文本占位符：嵌在 HTML 文本/JS 字符串里，不能用 json.dumps（会多出引号）
+TEXT_KEYS = {'DATA_YEAR_RANGE', 'DATA_YEAR_DESC', 'EXP_SPAN'}
+
+
+def parse_peer(path):
+    """读 peer_comparison.csv，返回图16 四组同行数据。
+
+    约定列：报告期, 公司, 代码, 毛利率_pct, 净利率_pct, 资产负债率_pct。
+    取第一个报告期（通常是最新年报）的全部公司；缺列返回 None。
+    """
+    if not path or not os.path.exists(path):
+        return None
+    with open(path, encoding='utf-8-sig') as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
+        return None
+    need = ('公司', '毛利率_pct', '净利率_pct', '资产负债率_pct')
+    if any(k not in rows[0] for k in need):
+        return None
+    period = (rows[0].get('报告期') or '').strip()
+    picked = [r for r in rows if (r.get('报告期') or '').strip() == period]
+
+    def col(r, k):
+        try:
+            return round(float(r.get(k) or 0), 2)
+        except (ValueError, TypeError):
+            return 0
+    return {
+        'CHART16_DATA_PEER_NAMES': [r['公司'].strip() for r in picked],
+        'CHART16_DATA_GROSS_MARGIN': [col(r, '毛利率_pct') for r in picked],
+        'CHART16_DATA_NET_MARGIN': [col(r, '净利率_pct') for r in picked],
+        'CHART16_DATA_DEBT_RATIO': [col(r, '资产负债率_pct') for r in picked],
+    }
 
 
 # ---------------------------------------------------------------------
@@ -160,7 +195,7 @@ def hist_cagr(arr):
 # ---------------------------------------------------------------------
 # 主流程
 # ---------------------------------------------------------------------
-def build(output_csv, forecast_csv=None):
+def build(output_csv, forecast_csv=None, peer_csv=None):
     years, metrics = load_output(output_csv)
     if not years:
         sys.exit("❌ output.csv 为空或无法解析年份")
@@ -169,6 +204,13 @@ def build(output_csv, forecast_csv=None):
 
     data = {}
     data['CHART_YEARS'] = years
+    # 文本型年份/预期窗口：以前生成器不产这些 key，导致 prefilled 必残留占位符
+    oldest, latest = years[-1], years[0]
+    data['DATA_YEAR_RANGE'] = '%s—%s 十年年报' % (oldest, latest) if n >= 2 else '%s 年报' % latest
+    data['DATA_YEAR_DESC'] = '%s—%s（N=%d）' % (oldest, latest, n) if n >= 2 else '%s（N=1）' % latest
+    data['EXP_SPAN'] = ('%sA→%dE 三年复合' % (latest, int(latest) + 3)
+                        if forecast_csv and os.path.exists(forecast_csv)
+                        else '最新A→E3三年复合')
 
     # 图1 营收/归母净利润(亿)
     data['CHART1_DATA_REVENUE'] = to_yi(M('营业收入'))
@@ -214,9 +256,10 @@ def build(output_csv, forecast_csv=None):
     # 图11 WC/收入(小数)
     data['CHART11_DATA_WC_RATIO'] = as_is(M('1元收入需要的WC'))
 
-    # 图12 人均(万元, 来自 headcount 注入; 缺则 [])
-    data['CHART12_DATA_REV_PER_CAPITA'] = to_wan(M('人均收入(万元)')) if '人均收入(万元)' in metrics else []
-    data['CHART12_DATA_PROFIT_PER_CAPITA'] = to_wan(M('人均归母净利润(万元)')) if '人均归母净利润(万元)' in metrics else []
+    # 图12 人均：build_headcount.py 写出的「人均收入(万元)」已是万元，
+    # 这里必须 as_is 原样透传；旧版再调 to_wan 会二次 ÷1e4，数值缩小一万倍。
+    data['CHART12_DATA_REV_PER_CAPITA'] = as_is(M('人均收入(万元)')) if '人均收入(万元)' in metrics else []
+    data['CHART12_DATA_PROFIT_PER_CAPITA'] = as_is(M('人均归母净利润(万元)')) if '人均归母净利润(万元)' in metrics else []
 
     # 图13 ROE/ROA/ROIC(%)
     data['CHART13_DATA_ROE'] = to_pct(M('ROE'))
@@ -234,11 +277,19 @@ def build(output_csv, forecast_csv=None):
     data['CHART15_DATA_TOTAL_ASSET_DAYS'] = as_is(M('总资产周转天数'), 1)
     data['CHART15_DATA_INVENTORY_DAYS'] = as_is(M('存货周转天数'), 1)
 
-    # 图16 同行 (AI 补, 留空)
-    data['CHART16_DATA_PEER_NAMES'] = []
-    data['CHART16_DATA_GROSS_MARGIN'] = []
-    data['CHART16_DATA_NET_MARGIN'] = []
-    data['CHART16_DATA_DEBT_RATIO'] = []
+    # 图16 同行：有 --peer 就自动填；没有则写空数组，交给 render_report.py 的
+    # 空图机制换成「未披露」提示卡（check_html.py P0-8 反向校验）。
+    # v2.0.2 修复：旧版「不写 key、保留占位符供第9步手填」在全自动闭环里会残留
+    # {{CHART16_*}}，触发 P0-1 残留占位符 + 内联 JS 语法错误（A股 ONLINE 档实测
+    # orchestrate EXIT=1）。补齐 peer_comparison.csv 后重新生成即自动出图，无需手填。
+    peer = parse_peer(peer_csv)
+    if peer:
+        data.update(peer)
+    else:
+        data['CHART16_DATA_PEER_NAMES'] = []
+        data['CHART16_DATA_GROSS_MARGIN'] = []
+        data['CHART16_DATA_NET_MARGIN'] = []
+        data['CHART16_DATA_DEBT_RATIO'] = []
 
     return data, n
 
@@ -248,14 +299,22 @@ def prefill_template(template_path, data):
         html = f.read()
     for key, val in data.items():
         placeholder = '{{' + key + '}}'
-        if placeholder in html:
-            html = html.replace(placeholder, json.dumps(val, ensure_ascii=False))
+        if placeholder not in html:
+            continue
+        # 文本型 key 嵌在 HTML 文本 / JS 单引号字符串里，用纯文本；其余用 JSON 字面量
+        repl = str(val) if key in TEXT_KEYS else json.dumps(val, ensure_ascii=False)
+        html = html.replace(placeholder, repl)
     return html
+
+
+def remaining_placeholders(html):
+    """返回模板中仍未被替换的 {{大写占位符}} 去重列表（叙事类属正常）。"""
+    return sorted(set(re.findall(r'\{\{([A-Z_][A-Z0-9_]*)\}\}', html)))
 
 
 def main():
     args = sys.argv[1:]
-    inp = out_dir = forecast = template = None
+    inp = out_dir = forecast = template = peer = None
     i = 0
     while i < len(args):
         a = args[i]
@@ -265,6 +324,8 @@ def main():
             out_dir = args[i + 1]; i += 2
         elif a == '--forecast':
             forecast = args[i + 1]; i += 2
+        elif a == '--peer':
+            peer = args[i + 1]; i += 2
         elif a == '--template':
             template = args[i + 1]; i += 2
         else:
@@ -272,22 +333,27 @@ def main():
                 inp = a
             i += 1
     if not inp:
-        sys.exit("用法: build_report_data.py <output.csv> [--out <目录>] [--forecast <forecast_consensus.csv>] [--template <report_template.html>]")
+        sys.exit("用法: build_report_data.py <output.csv> [--out <目录>] [--forecast <forecast_consensus.csv>] "
+                 "[--peer <peer_comparison.csv>] [--template <report_template.html>]")
 
     out_dir = out_dir or os.path.dirname(os.path.abspath(inp))
     os.makedirs(out_dir, exist_ok=True)
 
-    # 自动探测同目录 forecast_consensus.csv
+    # 自动探测同目录 forecast_consensus.csv / peer_comparison.csv
     if forecast is None:
         cand = os.path.join(out_dir, 'forecast_consensus.csv')
         if os.path.exists(cand):
             forecast = cand
+    if peer is None:
+        cand = os.path.join(out_dir, 'peer_comparison.csv')
+        if os.path.exists(cand):
+            peer = cand
     if template is None:
         template = os.path.join(SK, '..', 'report_template.html')
     if not os.path.exists(template):
         template = None
 
-    data, n = build(inp, forecast)
+    data, n = build(inp, forecast, peer)
 
     json_path = os.path.join(out_dir, 'report_data.json')
     with open(json_path, 'w', encoding='utf-8') as f:
@@ -308,8 +374,13 @@ def main():
         print(f"     预期CAGR: 营收={data['CHART6_DATA_EXP_CAGR'][0]}% 归母={data['CHART6_DATA_EXP_CAGR'][1]}%")
     else:
         print(f"     预期CAGR: 未提供 forecast_consensus.csv (图6右柱留空)")
+    _peers = data.get('CHART16_DATA_PEER_NAMES') or []
+    print(f"     图16 同行: {'已注入 ' + str(len(_peers)) + ' 家' if _peers else '未提供 peer_comparison.csv → 空图提示卡（未披露）'}")
     if filled:
-        print(f"     预填模板: {filled} (仅叙事占位符待填)")
+        rest = remaining_placeholders(html)
+        print(f"     预填模板: {filled}")
+        print(f"     剩余占位符 {len(rest)} 个（叙事类由 render_report.py / 人工填）: {' '.join(rest[:12])}"
+              + (' ...' if len(rest) > 12 else ''))
 
 
 if __name__ == '__main__':

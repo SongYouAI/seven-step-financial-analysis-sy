@@ -59,8 +59,12 @@ def _find_row(rows, name):
         if r and _norm(r[0]) == n:
             return r
     # 前缀容错 (如 '应收款项融资(元)' 仍命中 '应收款项融资')
+    # 但不得把「应收…占收入比」「…率」这类派生比率行当金额行取回去
     for r in rows:
-        if r and _norm(r[0]).startswith(n):
+        if not r:
+            continue
+        nm = _norm(r[0])
+        if nm.startswith(n) and not ('占比' in nm or nm.endswith(('率', '比'))):
             return r
     return None
 
@@ -120,7 +124,10 @@ def main():
 
     with open(status, 'a', encoding='utf-8') as f:
         f.write("\n" + "\n".join(lines) + "\n")
-    print(f"  ✅ 口径说明专节已追加 → {status} (标准口径≈{ar_val/1e8:.0f}亿, 宽口径≈{ (wide/1e8) if wide else 0:.0f}亿)")
+    # ar_val 为 None 时旧版在这里 None/1e8 崩溃（前面正文已专门处理过 None 分支，自相矛盾）
+    _std = '%.0f亿' % (ar_val / 1e8) if ar_val is not None else '未取得'
+    _wide = '%.0f亿' % (wide / 1e8) if wide is not None else '未取得'
+    print(f"  ✅ 口径说明专节已追加 → {status} (标准口径≈{_std}, 宽口径≈{_wide})")
 
 
 if __name__ == '__main__':

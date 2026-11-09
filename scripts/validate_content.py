@@ -3,7 +3,7 @@
 """
 七步八问财报分析报告 · 内容质检器 (validate_content.py)
 ======================================================
-将「内容五件套」标准变成可执行铁闸。扫描报告 Markdown，按 R1-R7 规则检查。
+将「内容五件套」标准变成可执行铁闸。扫描报告 Markdown，按 R1-R8 规则检查。
 
 规则与严重度：
   R1 算式覆盖    每步 ≥3 个可复算算式(含=与数字)        阻断
@@ -31,17 +31,23 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REF = os.path.join(os.path.dirname(HERE), "references")
 
 # ---------- 步骤分块 ----------
-STEP_RE = re.compile(r'^#{2,3}\s*第([1-9])步[^\n]*', re.M)
-CONCLUSION_RE = re.compile(r'^#{2,3}\s*第([1-9])步结论[^\n]*', re.M)
+STEP_RE = re.compile(r'^#{2,3}\s*第\s*([1-9]|一|二|三|四|五|六|七|八|九)\s*步[^\n]*', re.M)
+CONCLUSION_RE = re.compile(r'^#{2,3}\s*第\s*([1-9]|一|二|三|四|五|六|七|八|九)\s*步结论[^\n]*', re.M)
 
 # ---------- 规则正则 ----------
-EQUATION_RE = re.compile(r'(\d+(?:\.\d+)?)\s*÷\s*(\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)')
+# 支持负号 / 千分位 / ≈ / 结果带 %。旧版写「645.08 ÷ 722.01 = 89.35%」时
+# 会把 89.35 当成小数 89.35 与 0.8935 比对，误判成 99 倍偏差并阻断交付。
+EQUATION_RE = re.compile(
+    r'(-?[\d,]+(?:\.\d+)?)\s*÷\s*(-?[\d,]+(?:\.\d+)?)\s*[=≈]\s*'
+    r'(-?[\d,]+(?:\.\d+)?)\s*(%)?')
 HAS_EQ_NUM_RE = re.compile(r'=\s*\d+(?:\.\d+)?')
 JUDGE_WORDS = ['优', '良', '警戒', '偏高', '偏低', '较好', '较差', '显著高于', '显著低于', '远高于', '远低于']
 RULER_NEAR_RE = re.compile(r'(标尺|阈值|见标尺库|优[>~]|良[>~]|警戒[<~]|笔记§|>\s*\d|<\s*\d)')
 ANTI_RE = re.compile(r'(也可能|但也可能|反面|另一种可能|触发条件|也有可能)')
 LINK_RE = re.compile(r'(🔗|与其他步骤的印证|步骤咬合)')
-DERIVE_RE = re.compile(r'(推导|计算|公式|因为|所以|÷)')
+# 旧版含「÷」导致全文任意算式即判定有推导，R4 几乎永不触发；
+# 只认明确的推导措辞，让价格/评级结论真空降时能真的被拦下。
+DERIVE_RE = re.compile(r'(推导|计算|公式|因为|所以|测算|由此得出)')
 PRICE_TRIGGER_RE = re.compile(r'(目标价|合理价值|评级|买入|卖出|持有|市盈率|PE\s*=|动态估值倍数|估值倍数)')
 DEF_RE = re.compile(r'(定义|：|:|（)')  # 释义信号(宽松)
 
@@ -85,7 +91,10 @@ def check_r1(step_blocks):
     """每步 ≥3 算式。"""
     issues = []
     for no, title, body in step_blocks:
-        eqs = len(EQUATION_RE.findall(body)) + len(HAS_EQ_NUM_RE.findall(body))
+        # 旧版两个正则对同一「A÷B=C」各计一次，2 个算式就能假通过；
+        # 先剔除 EQUATION_RE 命中的片段，再统计其余等号数字。
+        eqs = len(EQUATION_RE.findall(body))
+        eqs += len(HAS_EQ_NUM_RE.findall(EQUATION_RE.sub('', body)))
         if eqs < 3:
             issues.append((no, title, f'仅 {eqs} 个算式(要求≥3)'))
     return issues
@@ -115,7 +124,8 @@ def check_r3(step_blocks, terms):
                 idx = body.find(t)
                 ctx = body[idx: idx + 30]
                 # 宽松：若附近有括号释义或「见词典」则通过
-                if not ('((' in ctx or '见词典' in ctx or '：' in ctx[:len(t) + 2] or ':' in ctx[:len(t) + 2]):
+                if not (('(' in ctx or '（' in ctx or '见词典' in ctx
+                         or '：' in ctx[:len(t) + 2] or ':' in ctx[:len(t) + 2])):
                     # 全文若已有释义定义则放宽
                     if not re.search(re.escape(t) + r'\s*[：（:]', body):
                         issues.append((no, title, f'术语「{t}」首次出现无释义'))
@@ -147,7 +157,11 @@ def check_r6(text, step_blocks):
     issues = []
     # 全报告级：提取所有 A÷B=C
     for m in EQUATION_RE.finditer(text):
-        a, b, c = float(m.group(1)), float(m.group(2)), float(m.group(3))
+        a = float(m.group(1).replace(',', ''))
+        b = float(m.group(2).replace(',', ''))
+        c = float(m.group(3).replace(',', ''))
+        if m.group(4):          # 结果写成百分数，还原成小数再比对
+            c /= 100.0
         if b == 0:
             continue
         real = a / b
@@ -201,6 +215,11 @@ def run_on_text(text):
         'R7': check_r7(blocks),
         'R8': check_r8(text),
     }
+    # 标题写法不匹配时旧版 blocks=[]，所有规则都空转却打印「✅ 通过」；
+    # 这里把「零检查」本身作为阻断项报出来。
+    if not blocks:
+        results['R1'].append(('全报告', '未识别到步骤标题',
+                              '未匹配到任何「## 第N步」/「第N步结论」标题，质检器实际未执行任何检查'))
     return results, blocks
 
 
@@ -287,9 +306,10 @@ def main():
     overall = 0
     for fp in args.files:
         if not os.path.exists(fp):
-            print(f'[跳过] 文件不存在: {fp}')
+            print(f'[错误] 文件不存在: {fp}')
+            overall = max(overall, 1)
             continue
-        with open(fp, encoding='utf-8') as f:
+        with open(fp, encoding='utf-8-sig') as f:
             text = f.read()
         print(f'\n📄 检查: {fp}')
         results, _ = run_on_text(text)

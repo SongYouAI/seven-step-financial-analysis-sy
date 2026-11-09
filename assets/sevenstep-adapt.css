@@ -1,0 +1,194 @@
+/* 图表色板对齐 HYDRO PAPER 单强调体系（脚本里 window.__c 读 --chart-1..6） */
+:root{
+  --chart-1:#2a4bd7; --chart-2:#12684a; --chart-3:#c0442c;
+  --chart-4:#b7852a; --chart-5:#7f96a6; --chart-6:#4f5a60;
+}
+html[data-theme="dark"]{
+  --chart-1:#8fa6ff; --chart-2:#4fb98a; --chart-3:#e5775d;
+  --chart-4:#d8ad5a; --chart-5:#9aa7b3; --chart-6:#c3cbd0;
+}
+/* 图表容器：模板只定义 .chart-card / .chart-head，画布高度由此补齐 */
+.chart-body{position:relative;height:340px;padding:16px 20px 20px;}
+.chart-body canvas{display:block;width:100% !important;height:100% !important;}
+.chart-skeleton{display:none;}
+.chart-head .chart-idx{
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.16em;
+  color:var(--p-accent);margin-right:10px;
+}
+#chart-error{
+  display:none;margin:0 0 24px;padding:12px 18px;
+  background:var(--p-surface-2);border:1px solid var(--p-line);
+  border-left:2px solid var(--p-risk);border-radius:0 8px 8px 0;
+  font-size:13px;color:var(--p-risk);
+}
+/* 表格：旧 class 对齐模板 .table-wrap */
+.table-scroll{
+  border:1px solid var(--p-line);border-radius:12px;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  margin:20px 0;box-shadow:none;
+}
+.table-scroll table{margin:0;min-width:640px;width:100%;}
+.chart-card{margin:26px 0;}
+/* 正文里的术语小注 / 代码 / 列表 */
+.step-body blockquote{
+  margin:18px 0;padding:16px 20px;
+  background:var(--p-surface);border:1px solid var(--p-line);
+  border-left:2px solid var(--p-accent);border-radius:0 8px 8px 0;
+  font-size:13.5px;line-height:1.85;color:var(--p-ink-2);
+}
+.step-body blockquote p{margin:0;font-size:13.5px;line-height:1.85;color:var(--p-ink-2);}
+.step-body code,.exec-summary code,.source-box code{
+  font-family:var(--font-mono);font-size:.88em;
+  background:var(--p-surface-3);color:var(--p-ink);
+  padding:1px 5px;border-radius:3px;
+}
+.step-body ul,.step-body ol{margin:12px 0 12px 22px;}
+.step-body li{margin:6px 0;color:var(--p-ink-2);font-size:14px;line-height:1.85;}
+.step-body li strong,.exec-summary li strong{color:var(--p-ink);}
+.step-body hr{border:0;border-top:1px solid var(--p-line);margin:28px 0;}
+.step-body h2{display:none;}
+/* 数据分级：模板禁 emoji，改文字徽章 */
+.src-tag{
+  display:inline-block;font-family:var(--font-mono);font-size:10px;
+  font-weight:600;letter-spacing:.06em;line-height:1.5;
+  padding:1px 6px;margin:0 3px 0 0;border-radius:3px;
+  border:1px solid currentColor;vertical-align:1px;
+}
+.src-tag.a{color:var(--p-good);} .src-tag.b{color:var(--p-accent);}
+.src-tag.c{color:var(--p-warn);} .src-tag.x{color:var(--p-ink-3);}
+/* 2026 隔离区：沿用 source-box 结构，金色左边线 */
+.source-box.quarantine{
+  border-left-color:var(--p-warn);background:var(--p-surface-2);
+}
+.source-box.quarantine .sb-title{color:var(--p-warn);}
+/* 读前 5 条警示 / 页脚 */
+.warning-box{
+  background:var(--p-surface-2);border:1px solid var(--p-line);
+  border-left:2px solid var(--p-warn);border-radius:0 8px 8px 0;
+  padding:18px 22px;margin:22px 0 0;font-size:13.5px;color:var(--p-ink-2);
+}
+.warning-box>strong{display:block;font-family:var(--font-serif);font-size:16px;
+  color:var(--p-ink);margin-bottom:10px;}
+.warning-box ul{margin:0 0 0 20px;}
+.warning-box li{margin:6px 0;line-height:1.8;}
+.report-footer{
+  border-top:1px solid var(--p-line);margin:56px 0 0;padding:22px 0 40px;
+  font-family:var(--font-mono);font-size:10.5px;letter-spacing:.1em;
+  color:var(--p-ink-3);text-align:right;
+}
+.report-footer p{margin:0;}
+/* 执行摘要补充 */
+.exec-summary .rating-badge{
+  display:inline-block;margin:0 0 20px;font-size:12px;padding:5px 14px;
+  border:1px solid var(--p-ink-3);color:var(--p-ink-3);border-radius:999px;
+}
+.exec-summary .source-box p{font-size:13px;line-height:1.85;margin:6px 0;color:var(--p-ink-2);}
+.exec-summary .source-box strong{color:var(--p-ink);}
+/* 章节卡内标题层级留白 */
+.step-body h3:first-child{margin-top:0;}
+@media(max-width:900px){.chart-body{height:300px;padding:12px;}}
+@media print{.chart-body{height:300px;}.side-nav,.theme-toggle,.top-progress{display:none !important;}}
+/* 静默空图 → 显式「未披露」提示卡（render_report.py mark_empty_charts / 门禁 P0-8） */
+.chart-body canvas[hidden]{display:none !important;}
+.chart-body.chart-body-empty,.chart-body:has(.chart-empty-note){
+  height:auto !important;padding:0 !important;
+}
+.chart-empty-note{
+  border:1px solid var(--p-line);background:var(--p-surface-2);
+  border-left:3px solid var(--p-warn);border-radius:0 10px 10px 0;
+  padding:22px 26px;margin:4px 0;
+}
+.chart-empty-note .cen-badge{
+  display:inline-block;font-family:var(--font-mono);font-size:10px;
+  letter-spacing:.12em;color:var(--p-warn);margin-bottom:10px;
+}
+.chart-empty-note .cen-title{
+  font-family:var(--font-serif);font-size:17px;color:var(--p-ink);margin-bottom:8px;
+}
+.chart-empty-note p{margin:0;font-size:13px;line-height:1.85;color:var(--p-ink-2);}
+
+/* ── 页脚 brand 溯源条（v2.1.0 从八维 HYDRO PAPER v3.2.2 移植） ──
+   公众号 + 视频号二维码，data URI 内嵌，零远程资源。
+   放在适配层第 3 层，覆盖本文件上方较早期的 .report-footer 单行溯源样式。 */
+/* ── 页脚：紧凑溯源条（v3.2.2） ─────────────────────────────
+   设计意图：不是内容卡片，是版权条。四段式内容压成三段、标题与
+   kicker 同行、二维码 52px 紧跟渠道文字（不再拉到行末）、整块
+   收窄到 560px。视觉权重让给正文，信息一条不少。               */
+.report-footer{
+  max-width:1180px;margin:0 auto;padding:14px 48px 22px;
+  border-top:1px solid var(--p-line);
+}
+.brand-block{max-width:560px;}
+.brand-head{
+  display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+  margin:0 0 8px;
+}
+.brand-kicker{
+  margin:0;font-family:var(--font-mono);font-size:9px;
+  letter-spacing:.12em;color:var(--p-ink-3);
+}
+.brand-title{
+  margin:0;font-family:var(--font-serif);font-size:14px;
+  letter-spacing:0;color:var(--p-ink-2);
+}
+.brand-channels{margin:0 0 8px;border-top:1px solid var(--p-line);}
+.brand-channel{
+  display:flex;align-items:center;gap:12px;
+  padding:5px 0;border-bottom:1px solid var(--p-line);
+}
+.brand-channel-copy{flex:none;width:138px;min-width:0;}
+.brand-channel-name{margin:0 0 1px;font-size:11.5px;color:var(--p-ink-2);}
+.brand-channel-hint{
+  margin:0;font-family:var(--font-mono);font-size:9px;
+  letter-spacing:.02em;color:var(--p-ink-3);
+}
+.brand-qr{
+  flex:none;display:block;width:52px;padding:4px;
+  background:#ffffff;border:1px solid var(--p-line);border-radius:4px;
+  box-shadow:0 1px 5px rgba(18,24,28,.05);
+  cursor:zoom-in;transition:transform .2s ease,border-color .2s ease;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
+}
+.brand-qr:hover{transform:translateY(-2px);border-color:var(--p-accent);}
+.brand-qr img{display:block;width:100%;height:auto;}
+.brand-meta{
+  display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+  margin:0;
+}
+.brand-note{margin:0;font-size:10px;color:var(--p-ink-3);}
+.brand-link{margin:0;font-size:10px;}
+.brand-link a{
+  color:var(--p-accent);text-decoration:none;
+  border-bottom:1px solid var(--p-accent);
+}
+.report-attribution{
+  margin:0;font-family:var(--font-mono);font-size:9.5px;
+  letter-spacing:.04em;color:var(--p-ink-3);
+}
+.qr-lightbox{
+  position:fixed;inset:0;z-index:9999;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(18,24,28,.78);cursor:zoom-out;
+}
+.qr-lightbox[hidden]{display:none;}
+.qr-lightbox img{
+  display:block;width:min(78vw,420px);height:auto;
+  padding:16px;background:#ffffff;border-radius:8px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+}
+html[data-theme="dark"] .brand-title,
+html[data-theme="dark"] .brand-channel-name{color:var(--p-ink);}
+html[data-theme="dark"] .brand-kicker,
+html[data-theme="dark"] .brand-channel-hint,
+html[data-theme="dark"] .brand-note,
+html[data-theme="dark"] .report-attribution{color:var(--p-ink-2);}
+html[data-theme="dark"] .brand-qr{background:#ffffff;border-color:rgba(255,255,255,.2);}
+html[data-theme="dark"] .qr-lightbox{background:rgba(6,10,12,.86);}
+@media(min-width:1200px){.report-footer{max-width:1240px;padding-left:248px;}}
+@media(max-width:768px){
+  .report-footer{padding:12px 18px 18px;}
+  .brand-channel{gap:12px;}
+  .brand-channel-copy{width:128px;}
+  .brand-qr{width:48px;}
+  .qr-lightbox img{width:min(86vw,360px);}
+}

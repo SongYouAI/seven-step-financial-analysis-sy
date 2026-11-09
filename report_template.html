@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{COMPANY_NAME}} · 七步财报分析</title>
-<!-- 图表库本地化：随报告拷贝 assets/ 即可离线查看；缺失时自动回退 CDN -->
+<!-- 图表库本地化：随报告拷贝 assets/ 即可离线查看；缺失时显示明确错误，不回退远程 CDN -->
 <script src="assets/chart.umd.min.js"></script>
 <script src="assets/chartjs-plugin-datalabels.min.js"></script>
 <style>
@@ -22,6 +22,9 @@
     --text-secondary: #4a5468;
     --green: #0d7c3b;
     --red: #b71c1c;
+    /* A 股约定：涨=红 / 跌=绿。语义变量与颜色名解耦，避免误用 --green 表达上涨。 */
+    --up-color: #b71c1c;
+    --down-color: #0d7c3b;
     --blue: #1e5fb4;
     --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
     --shadow-md: 0 4px 16px rgba(0,0,0,0.06);
@@ -165,8 +168,9 @@ body {
 .kpi-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
 .kpi-value { font-size: 22px; font-weight: 800; color: var(--navy); }
 .kpi-delta { font-size: 12px; margin-top: 4px; color: var(--text-secondary); }
-.kpi-delta.up, .kpi-delta.d { color: var(--green) !important; font-weight: 700; }
-.kpi-delta.down, .kpi-delta.r { color: var(--red) !important; font-weight: 700; }
+/* 涨红跌绿：.up/.d = 数值上升（红），.down/.r = 数值下降（绿） */
+.kpi-delta.up, .kpi-delta.d { color: var(--up-color) !important; font-weight: 700; }
+.kpi-delta.down, .kpi-delta.r { color: var(--down-color) !important; font-weight: 700; }
 .warning-box {
     background: #fef3e2; border: 1px solid rgba(200,148,59,0.2);
     border-left: 4px solid var(--gold);
@@ -403,8 +407,8 @@ body {
 .down { color: var(--red) !important; font-weight: 700; }
 /* KPI 涨跌动态着色（AI 生成 KPI 卡片时按方向加 .up / .down） */
 .kpi-delta { font-size: 12px; margin-top: 4px; color: var(--text-secondary); }
-.kpi-delta.up { color: var(--green); }
-.kpi-delta.down { color: var(--red); }
+.kpi-delta.up { color: var(--up-color); }
+.kpi-delta.down { color: var(--down-color); }
 
 /* 空容器处理 */
 .exec-summary-section-fallback { font-size: 13px; color: var(--text-secondary); }
@@ -731,7 +735,7 @@ body {
 
 <!-- 附录 -->
 <div class="appendix-wrap" style="background:var(--white);border-radius:var(--radius-lg);padding:40px;box-shadow:var(--shadow-md);margin:50px 0;border:1px solid var(--gray-light);">
-  <h2 style="font-size:var(--fs-h2);font-weight:800;color:var(--navy);margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid var(--gold);">📋 附录</h2>
+  <h2 style="font-size:var(--fs-h2);font-weight:800;color:var(--navy);margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid var(--gold);">附录</h2>
 {{APPENDIX_CONTENT}}
 </div>
 
@@ -786,10 +790,12 @@ body {
     Chart.defaults.plugins.datalabels.anchor='end';
     Chart.defaults.plugins.datalabels.clamp=true;
     window.__years={{CHART_YEARS}};
-    window.__yearStart=window.__years[0];
-    window.__yearEnd=window.__years[window.__years.length-1];
+    /* 年份数组左新右旧：Start=最旧年，End=最新年，避免图标题倒序 */
+    window.__yearStart=window.__years[window.__years.length-1];
+    window.__yearEnd=window.__years[0];
     window.__yearSpan=window.__yearStart+'-'+window.__yearEnd;
-    window.__yearSpanGrowth=window.__years[1]+'-'+window.__yearEnd;
+    window.__yearSpanGrowth=(window.__years.length>1)
+      ? window.__years[window.__years.length-2]+'-'+window.__years[0] : window.__yearSpan;
     /* P2-1 修复：预期CAGR 窗口改为动态注入，避免硬编码"2026E-2028E"与实际口径(如 2025A→2028E 三年)不符。
        生成器可用占位符 {{EXP_SPAN}} 注入真实窗口；未注入时回退为不写死的通用表述，杜绝再次失真。 */
     var __es='{{EXP_SPAN}}';
@@ -800,14 +806,9 @@ body {
     window.__ready=true;
     window.__charts.forEach(function(x){ renderChart(x[0],x[1]); });
   }
+  /* 离线自包含：只认同目录 assets/，不再回退远程 CDN（内网/国内 jsdelivr 不可达） */
   if(typeof Chart==='undefined'){
-    var pending=2, urls=['https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js','https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js'];
-    urls.forEach(function(src){
-      var sc=document.createElement('script'); sc.src=src;
-      sc.onload=function(){ if(--pending===0) boot(); };
-      sc.onerror=function(){ showChartError('⚠️ 图表库加载失败：本地 assets/ 缺失且 CDN 不可达，请联网或补回 assets/ 后重试。'); };
-      document.head.appendChild(sc);
-    });
+    showChartError('图表库未加载：请确认本报告同目录存在 assets/ 文件夹（chart.umd.min.js 与 chartjs-plugin-datalabels.min.js）。');
   } else { boot(); }
 })();
 </script>
@@ -829,12 +830,12 @@ body {
   type:'line',
   data:{labels:window.__years,datasets:[
     {label:'经营净现金流/归母净利润',data:{{CHART2_DATA_CF_RATIO}},borderColor:window.__c.accent,tension:0.3,pointRadius:4},
-    {label:'扣非净利润/归母净利润',data:{{CHART2_DATA_DEDUCT_RATIO}},borderColor:window.__c.green,tension:0.3,pointRadius:4,yAxisID:'y1'}
+    {label:'扣非净利润/净利润',data:{{CHART2_DATA_DEDUCT_RATIO}},borderColor:window.__c.green,tension:0.3,pointRadius:4,yAxisID:'y1'}
   ]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{title:{display:false,text:'图2：盈利质量四关系图（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
     scales:{y:{title:{display:true,text:'经营净现金流/归母净利润'}},
-      y1:{position:'right',title:{display:true,text:'扣非净利润/归母净利润'},grid:{drawOnChartArea:false},min:0,max:1.1}}
+      y1:{position:'right',title:{display:true,text:'扣非净利润/净利润'},grid:{drawOnChartArea:false},min:0,max:1.1}}
   }
 });</script>
 
@@ -866,7 +867,7 @@ body {
 
 <script>window.__reg('chart5',{
   type:'bar',
-  data:{labels:window.__years.slice(1),datasets:[
+  data:{labels:window.__years.slice(0,-1),datasets:[
     {label:'营收增长率（%）',data:{{CHART5_DATA_REV_GROWTH}},backgroundColor:window.__c.accent},
     {label:'归母净利润增长率（%）',data:{{CHART5_DATA_NET_PROFIT_GROWTH}},backgroundColor:window.__c.green}
   ]},
@@ -889,11 +890,21 @@ body {
 });</script>
 
 <script>window.__reg('chart7',(function(){
+  /* 100% 堆叠柱：原 line+fill+stacked 在 null 缺口处会拉出色墙与斜切断崖。
+     实色柱 + y 固定 0–100 + 空档自然留白，数据不变。 */
   var names={{BUSINESS_SEGMENT_NAMES}};
   var series={{CHART7_DATA_SEGMENTS}};
-  var pal=[['rgba(30,95,180,0.5)','#1e5fb4'],['rgba(183,28,28,0.3)','#b71c1c'],['rgba(200,148,59,0.4)','#c8943b'],['rgba(91,139,239,0.4)',window.__c.blue2],['rgba(46,139,87,0.4)','#2e8b57'],['rgba(70,130,180,0.4)','#4682b4']];
-  var ds=names.map(function(nm,i){var c=pal[i%pal.length];return {label:nm+'占比',data:series[i]||[],backgroundColor:c[0],borderColor:c[1],fill:true,tension:0.3};});
-  return {type:'line',data:{labels:window.__years,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:false,text:'图7：收入结构变化趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:true,formatter:function(v,ctx){var stack=ctx.chart.data.datasets.reduce(function(s,ds,i){return s+(ds.data[ctx.dataIndex]||0);},0);return stack>0?v.toFixed(1)+'%':'';},anchor:'center',align:'center',color:'#fff',font:{size:11,weight:'bold'},textStrokeColor:'rgba(0,0,0,0.3)',textStrokeWidth:2}},scales:{y:{stacked:true,title:{display:true,text:'占比（%）'},ticks:{callback:v=>v+'%'},max:100}}}};
+  var C=window.__c||{accent:'#2a4bd7',blue2:'#7f96a6',orange:'#b7852a',green:'#12684a',red:'#c0442c',teal:'#4f5a60'};
+  var pal=[C.accent,C.blue2,C.orange,C.green,C.red,C.teal];
+  var ds=names.map(function(nm,i){return {label:nm+'占比',data:series[i]||[],backgroundColor:pal[i%pal.length],borderWidth:0,barPercentage:0.7,categoryPercentage:0.82};});
+  return {type:'bar',data:{labels:window.__years,datasets:ds},options:{responsive:true,maintainAspectRatio:false,
+    plugins:{title:{display:false,text:'图7：收入结构变化趋势（'+window.__yearSpan+'）',font:{size:16}},
+      legend:{position:'top',labels:{boxWidth:12,font:{size:11}}},
+      tooltip:{callbacks:{label:function(c){return c.dataset.label+' '+(c.parsed.y==null?'无披露':c.parsed.y.toFixed(2)+'%');}}},
+      datalabels:{display:function(c){return c.dataset.data[c.dataIndex]>3;},
+        formatter:function(v){return v.toFixed(1)+'%';},color:'#fff',font:{size:10,weight:'bold'}}},
+    scales:{x:{stacked:true,grid:{display:false}},
+      y:{stacked:true,min:0,max:100,title:{display:true,text:'占比（%）'},ticks:{callback:function(v){return v+'%';}}}}}};
 })());</script>
 
 <script>window.__reg('chart8',(function(){
@@ -966,7 +977,7 @@ body {
 
 <script>window.__reg('chart14',{
   type:'bar',
-  data:{labels:['销售净利率','总资产周转率（次）','权益乘数'],datasets:[{label:'2025年',data:{{CHART14_DATA_DUPONT}},backgroundColor:[window.__c.accent,window.__c.green,window.__c.orange]}]},
+  data:{labels:['销售净利率','总资产周转率（次）','权益乘数'],datasets:[{label:window.__yearEnd+'年',data:{{CHART14_DATA_DUPONT}},backgroundColor:[window.__c.accent,window.__c.green,window.__c.orange]}]},
   options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
     plugins:{title:{display:false,text:'图14：杜邦三因素拆解（'+window.__yearEnd+'年）',font:{size:16}},datalabels:{display:true,formatter:(v,i)=>[v+'%',v+'次',v+'x'][i]}}
   }

@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-模块0.5：在线拉数适配层 (七步财报分析 · 港股/美股)
+模块0.5：在线拉数适配层 (七步财报分析 · A股/港股/美股)
 =========================================================
-把 global-stock-data 的东财 datacenter 港/美三表接口，转换成
-build_metrics.py 能吃的标准宽表 CSV（科目, YYYY年年报, ... 左新右旧）。
+把东财 datacenter 三表接口转换成 build_metrics.py 能吃的标准宽表 CSV
+（科目, YYYY年年报, ... 左新右旧）。
+
+两种返回结构，走两条独立分支，互不影响:
+- 港股/美股: 行式 ITEM_NAME/AMOUNT，按科目透视（pivot）
+- A股:       宽表英文列（每行一个报告期），按 A_FIELD_MAP 逐列取数
 
 设计:
-- 零第三方 Python 依赖（仅标准库 + 系统 curl，curl 自动走环境 HTTP(S)_PROXY）
+- 零第三方 Python 依赖（仅标准库 + 系统 curl）
 - 仅拉年报期 (REPORT_TYPE="年报")，避开季报/中报噪声
 - 币种按东财 CURRENCY 字段原样保留，写入 _meta.json 供报告标注
 - 不改动 build_metrics.py / convert_input.py 核心（零回归）
 - 美股财年在 9 月末结束（如 AAPL 2025-09-27），列标签取 fiscal year "2025年年报"
+- A股默认取最近 10 个年报（--years N 可改），三表年份取交集
 
-数据源归属: 东财 datacenter (global-stock-data by Simon 林, Apache-2.0)
+数据源归属: 东财 datacenter (港美股链路来自 global-stock-data by Simon 林, Apache-2.0)
 整合进七步财报分析 skill (松幽, MIT) — 仅作在线拉数调用，保留上游 attribution。
 
 用法:
-  python3 build_online_puller.py <secucode> [--out <目录>]
-    secucode: 00700.HK (港股) / AAPL.O (NASDAQ) / BABA.N (NYSE)
+  python3 build_online_puller.py <secucode> [--out <目录>] [--years N]
+    secucode: 601869 / 601869.SH (A股) / 00700.HK (港股) / AAPL.O (美股)
     输出: 默认 <cwd>/01_中间产物_CSV输入/{资产负债表,利润表,现金流量表}.csv + _meta.json
           （对齐七步分析 00→01→02 布局；--out 可覆盖）
     后续: build_metrics.py 01_中间产物_CSV输入/资产负债表.csv ... → output.csv
@@ -40,6 +45,89 @@ REPORT_MAP = {
     "cashflow": {"hk": "RPT_HKSK_FN_CASHFLOW",  "us": "RPT_USSK_FN_CASHFLOW"},
 }
 OUT_NAME = {"balance": "资产负债表", "income": "利润表", "cashflow": "现金流量表"}
+
+# ── A 股分支 ──────────────────────────────────────────────────────────────
+# 东财 F10 A 股三表：每行 = 一个报告期，科目是英文列（另有 *_YOY 冗余列，不取）。
+# 中文科目 -> 英文列候选（按优先级）。多候选用于兼容新旧准则口径切换：
+# 交易性金融资产 2025 年是 TRADE_FINASSET_NOTFVTPL，2016 年是 FVTPL_FINASSET。
+A_REPORT_MAP = {
+    "balance": "RPT_F10_FINANCE_GBALANCE",
+    "income": "RPT_F10_FINANCE_GINCOME",
+    "cashflow": "RPT_F10_FINANCE_GCASHFLOW",
+}
+
+A_FIELD_MAP = {
+    "balance": {
+        "货币资金": ("MONETARYFUNDS",),
+        "存货": ("INVENTORY",),
+        "应收账款": ("ACCOUNTS_RECE",),
+        "应收票据": ("NOTE_RECE",),
+        "预付款项": ("PREPAYMENT",),
+        "应付账款": ("ACCOUNTS_PAYABLE",),
+        "应付票据": ("NOTE_PAYABLE",),
+        "应付票据及应付账款": ("NOTE_ACCOUNTS_PAYABLE",),
+        "预收款项": ("ADVANCE_RECEIVABLES",),
+        "合同负债": ("CONTRACT_LIAB",),
+        "应付职工薪酬": ("STAFF_SALARY_PAYABLE",),
+        "应交税费": ("TAX_PAYABLE",),
+        "其他应付款合计": ("TOTAL_OTHER_PAYABLE", "OTHER_PAYABLE"),
+        "其他流动负债": ("OTHER_CURRENT_LIAB",),
+        "短期借款": ("SHORT_LOAN",),
+        "长期借款": ("LONG_LOAN",),
+        "应付债券": ("BOND_PAYABLE",),
+        "长期应付款": ("LONG_PAYABLE",),
+        "交易性金融负债": ("TRADE_FINLIAB_NOTFVTPL", "FVTPL_FINLIAB", "TRADE_FINLIAB"),
+        "应付股利": ("DIVIDEND_PAYABLE",),
+        "一年内到期的非流动负债": ("NONCURRENT_LIAB_1YEAR",),
+        "租赁负债": ("LEASE_LIAB",),
+        "递延收益": ("DEFER_INCOME",),
+        "交易性金融资产": ("TRADE_FINASSET_NOTFVTPL", "FVTPL_FINASSET", "TRADE_FINASSET"),
+        "长期股权投资": ("LONG_EQUITY_INVEST",),
+        "其他权益工具投资": ("OTHER_EQUITY_INVEST",),
+        "投资性房地产": ("INVEST_REALESTATE",),
+        "应收股利": ("DIVIDEND_RECE",),
+        "可供出售金融资产": ("AVAILABLE_SALE_FINASSET",),
+        "固定资产": ("FIXED_ASSET",),
+        "在建工程": ("CIP",),
+        "无形资产": ("INTANGIBLE_ASSET",),
+        "使用权资产": ("USERIGHT_ASSET",),
+        "商誉": ("GOODWILL",),
+        "长期待摊费用": ("LONG_PREPAID_EXPENSE",),
+        "流动资产合计": ("TOTAL_CURRENT_ASSETS",),
+        "非流动资产合计": ("TOTAL_NONCURRENT_ASSETS",),
+        "资产总计": ("TOTAL_ASSETS",),
+        "负债合计": ("TOTAL_LIABILITIES",),
+        "归属于母公司股东权益合计": ("TOTAL_PARENT_EQUITY", "PARENT_EQUITY_BALANCE"),
+        "股东权益合计": ("TOTAL_EQUITY", "EQUITY_BALANCE"),
+    },
+    "income": {
+        "营业收入": ("TOTAL_OPERATE_INCOME", "OPERATE_INCOME"),
+        "营业成本": ("OPERATE_COST",),
+        "净利润": ("NETPROFIT",),
+        "归属于母公司股东的净利润": ("PARENT_NETPROFIT",),
+        "扣除非经常性损益后的净利润": ("DEDUCT_PARENT_NETPROFIT",),
+        "投资收益": ("INVEST_INCOME",),
+        "公允价值变动": ("FAIRVALUE_CHANGE_INCOME",),
+        "利息收入": ("FE_INTEREST_INCOME",),
+        "研发费用": ("RESEARCH_EXPENSE", "ME_RESEARCH_EXPENSE"),
+        "管理费用": ("MANAGE_EXPENSE",),
+        "销售费用": ("SALE_EXPENSE",),
+        "财务费用": ("FINANCE_EXPENSE",),
+    },
+    "cashflow": {
+        "经营活动产生的现金流量净额": ("NETCASH_OPERATE",),
+        "购建固定资产、无形资产和其他长期资产支付的现金": ("CONSTRUCT_LONG_ASSET",),
+        "投资活动产生的现金流量净额": ("NETCASH_INVEST",),
+        "筹资活动产生的现金流量净额": ("NETCASH_FINANCE",),
+        "销售商品、提供劳务收到的现金": ("SALES_SERVICES",),
+    },
+}
+
+# 缺任一项即判定拉数失败，禁止产出静默归零的半成品
+A_CORE_ITEMS = (
+    "资产总计", "负债合计", "营业收入",
+    "归属于母公司股东的净利润", "经营活动产生的现金流量净额",
+)
 
 # 跨准则科目名映射 (港股IFRS / 美股US GAAP → A股中国企业准则 build_metrics 期望名)
 # 仅做精确改名, 避免模糊匹配歧义 (如"其他营业收入"不映射, 以免被"营业收入"误命中)。
@@ -166,15 +254,37 @@ US_SUFFIX = (".O", ".N", ".A", ".P", ".Q")   # NASDAQ / NYSE / NYSE American / N
 
 
 def detect_market(secucode):
-    """按代码后缀判市场；返回 hk / us / a(A股,本脚本不支持) / unknown"""
+    """按代码后缀判市场；返回 hk / us / a(A股) / unknown"""
     s = secucode.upper().strip()
     if s.endswith(".HK"):
         return "hk"
     if s.endswith(US_SUFFIX):
         return "us"
+    if s.endswith((".SH", ".SZ", ".BJ")):
+        return "a"
     if s.isdigit() and len(s) == 6:
         return "a"
     return "unknown"
+
+
+def normalize_a_code(secucode):
+    """A股 6 位纯数字补交易所后缀。
+
+    东财 F10 三表 filter 实测只认带后缀代码：601869.SH success=true，
+    601869 / 601869.SS 均 success=false、rows=0。已带后缀的原样大写返回。
+    """
+    s = secucode.upper().strip()
+    if "." in s:
+        return s
+    if s.isdigit() and len(s) == 6:
+        head = s[0]
+        if head in "69":     # 沪市主板 / 科创板 / 沪B
+            return s + ".SH"
+        if head in "023":    # 深市主板 / 创业板 / 深B
+            return s + ".SZ"
+        if head in "48":     # 北交所 / 新三板（东财 F10 暂不收录，调用方明确报错）
+            return s + ".BJ"
+    return s
 
 
 def em_get(report_name, secucode, page_size=200):
@@ -242,43 +352,204 @@ def pivot(rows, market):
     return ylist, data, currency
 
 
-def write_csv(out_dir, stmt, ylist, data):
-    path = os.path.join(out_dir, OUT_NAME[stmt] + ".csv")
-    used = {}
-    with open(path, "w", encoding="utf-8", newline="") as f:
+def write_csv(out_dir, stmt, ylist, data, prefix=""):
+    """输出标准宽表。多对一别名撞名时按年份合并（旧版直接跳过，会静默丢科目）。
+
+    prefix 传公司简称时输出「长飞光纤_资产负债表.csv」，让 build_metrics.py 的
+    company_from_name() 自动识别公司名，避免报告标题变成「未知公司」。
+    港美股分支不传，保持原文件名（零回归）。
+    """
+    name = OUT_NAME[stmt] + ".csv"
+    if prefix:
+        safe = "".join(c for c in prefix if c not in '\\/:*?"<>|').strip()
+        if safe:
+            name = safe + "_" + name
+    path = os.path.join(out_dir, name)
+    merged = {}
+    for item, series in data.items():
+        out_item = ENGINE_ALIAS.get(item, item)   # 归一化到引擎精确关键词(拿3分防抢跑)
+        if out_item not in merged:
+            merged[out_item] = dict(series)
+            continue
+        tgt = merged[out_item]
+        added = 0
+        for y, v in series.items():
+            if not tgt.get(y) and v not in ('', None):
+                tgt[y] = v
+                added += 1
+        print("  ⚠️ 科目撞名已按年份合并: '%s' -> '%s'（补 %d 个年份，已有值不覆盖）"
+              % (item, out_item, added))
+
+    def cell(s):
+        s = str(s)
+        return '"%s"' % s.replace('"', '""') if (',' in s or '"' in s) else s
+
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
         f.write("科目," + ",".join("%s年年报" % y for y in ylist) + "\n")
-        for item, series in data.items():
-            out_item = ENGINE_ALIAS.get(item, item)   # 归一化到引擎精确关键词(拿3分防抢跑)
-            if out_item in used:                       # 撞名：保留先出现的，但必须出声（禁静默丢数）
-                print("  ⚠️ 科目撞名已跳过: '%s' -> '%s'（已有同名，保留先出现者）" % (item, out_item))
-                continue
-            used[out_item] = True
-            vals = [str(series.get(y, "")) for y in ylist]
-            f.write(out_item + "," + ",".join(vals) + "\n")
+        for out_item, series in merged.items():
+            vals = [cell(series.get(y, "")) for y in ylist]
+            f.write(cell(out_item) + "," + ",".join(vals) + "\n")
     return path
+
+
+def a_pivot(rows, stmt, years_limit):
+    """A股宽表英文列 -> (years_desc, {中文科目:{年:值}}, missing, currency)
+
+    与港美股 pivot 的结构差异：A股每行是一个报告期、科目是英文列，
+    因此按 A_FIELD_MAP 逐列取数；多候选按优先级取第一个非 None 值
+    （兼容新旧准则列名切换，如交易性金融资产 2025=TRADE_FINASSET_NOTFVTPL /
+    2016=FVTPL_FINASSET）。上游 None 一律留空并在 missing 登记，
+    绝不写 0 冒充真实值，也不做插值。
+    """
+    recs = []
+    for r in rows:
+        rd = (r.get("REPORT_DATE") or "")[:10]
+        if rd < "2000":
+            continue
+        if not rd.endswith("-12-31"):
+            # 期次隔离：只认 12-31 年报。即便上游 filter 失效也不让季报混进十年序列
+            continue
+        recs.append((rd[:4], r))
+    recs.sort(key=lambda x: x[0], reverse=True)
+    seen, uniq = set(), []
+    for y, r in recs:
+        if y in seen:
+            continue
+        seen.add(y)
+        uniq.append((y, r))
+    uniq = uniq[:years_limit]
+    if not uniq:
+        return [], {}, {}, "CNY"
+    data, missing = {}, {}
+    for cn, candidates in A_FIELD_MAP[stmt].items():
+        series, miss = {}, []
+        for y, r in uniq:
+            raw = None
+            for c in candidates:
+                v = r.get(c)
+                if v is not None and v != "":
+                    raw = v
+                    break
+            if raw is None:
+                miss.append(y)
+                continue
+            try:
+                series[y] = float(raw)
+            except (ValueError, TypeError):
+                miss.append(y)
+        if series:
+            data[cn] = series
+        if miss:
+            missing[cn] = miss
+    currency = ""
+    for _, r in uniq:
+        if r.get("CURRENCY"):
+            currency = r["CURRENCY"]
+            break
+    return [y for y, _ in uniq], data, missing, (currency or "CNY")
+
+
+def run_a(secucode, out_dir, years_limit):
+    """A股 ONLINE 档：东财 F10 三表 -> 三张标准宽表 CSV + _meta.json。"""
+    code = normalize_a_code(secucode)
+    if code.endswith(".BJ"):
+        sys.exit("❌ %s 属北交所/新三板：实测东财 F10 三表接口不收录（success=false）。\n"
+                 "   本脚本不产出空表冒充数据。请改用本地 CSV 或 westock-mcp。" % code)
+    print("市场: A股 | 代码: %s（规范化 %s）| 取最近 %d 个年报"
+          % (secucode, code, years_limit))
+    collected, currencies, missing_all = {}, [], {}
+    company = ""
+    for stmt in ("balance", "income", "cashflow"):
+        rows = em_get(A_REPORT_MAP[stmt], code, page_size=50)
+        if not rows:
+            print("  ⚠️ %s 无数据" % OUT_NAME[stmt])
+            continue
+        if not company:
+            company = next((str(r["SECURITY_NAME_ABBR"]).strip() for r in rows
+                            if r.get("SECURITY_NAME_ABBR")), "")
+        ylist, data, miss, currency = a_pivot(rows, stmt, years_limit)
+        if not ylist:
+            print("  ⚠️ %s 无有效年报期" % OUT_NAME[stmt])
+            continue
+        collected[stmt] = (ylist, data)
+        missing_all[stmt] = miss
+        currencies.append(currency)
+        print("  · %s.csv %d 科目 %d 年(%s..%s) 上游缺失科目 %d"
+              % (OUT_NAME[stmt], len(data), len(ylist), ylist[-1], ylist[0], len(miss)))
+    if not collected:
+        sys.exit("❌ 三张表均无数据，终止（不产出残缺 CSV）。\n"
+                 "   排查：①代码是否正确（601869 / 601869.SH）②东财是否收录该标的 ③网络/风控")
+    absent = [OUT_NAME[s] for s in ("balance", "income", "cashflow") if s not in collected]
+    if absent:
+        sys.exit("❌ 未取到数据：%s —— 三张表缺一不可，已终止（不产出残缺 CSV）。\n"
+                 "   排查：①东财该标的此报表缺失 ②网络/风控，稍后重试 ③代码是否正确"
+                 % "、".join(absent))
+    # 核心科目硬校验：缺任一年即阻断，禁止静默归零的半成品
+    problems = []
+    for item in A_CORE_ITEMS:
+        for stmt, (ylist, data) in collected.items():
+            if item not in A_FIELD_MAP[stmt]:
+                continue
+            lack = [y for y in ylist if y not in (data.get(item) or {})]
+            if lack:
+                problems.append("%s 缺 %s" % (item, "/".join(lack)))
+    if problems:
+        sys.exit("❌ 核心科目校验失败（已终止，不产出静默归零的 CSV）：\n   %s"
+                 % "\n   ".join(problems))
+    # 三表年份交集，保证 build_metrics 年份范围一致
+    common = None
+    for ylist, _ in collected.values():
+        s = set(ylist)
+        common = s if common is None else (common & s)
+    common = sorted(common or [], reverse=True)
+    if not common:
+        sys.exit("❌ 三张表无共同报告期，无法对齐，终止")
+    currency = next((c for c in currencies if c), "CNY")
+    meta = {
+        "secucode": code, "market": "a", "currency": currency,
+        "company": company or code,
+        "source": "东财 datacenter F10 (RPT_F10_FINANCE_G*)",
+        "report_type": "年报", "years_common": common, "years": {},
+        "missing_cells": missing_all,
+        "note": "上游未披露的单元格在 CSV 中留空；build_metrics.py 按 0.0 读取，属引擎既有口径，非真实为零。",
+    }
+    for stmt, (ylist, data) in collected.items():
+        p = write_csv(out_dir, stmt, common, data, prefix=company)
+        meta["years"][stmt] = ylist
+        print("  ✅ %s 已裁切至 %d 年(%s..%s)"
+              % (os.path.basename(p), len(common), common[-1], common[0]))
+    with open(os.path.join(out_dir, "_meta.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    print("完成 → %s (统一 %d 年, 币种=%s)" % (out_dir, len(common), currency))
 
 
 def main():
     args = sys.argv[1:]
     if not args:
-        sys.exit("用法: build_online_puller.py <secucode> [--out <目录>]")
+        sys.exit("用法: build_online_puller.py <secucode> [--out <目录>] [--years N]")
     secucode = args[0]
     # 默认落 ./01_中间产物_CSV输入/（对齐七步分析 00→01→02 布局），--out 可覆盖
     out_dir = os.path.join(os.getcwd(), "01_中间产物_CSV输入")
     if "--out" in args:
         i = args.index("--out")
         if i + 1 >= len(args):
-            sys.exit("❌ --out 缺少目录参数。用法: build_online_puller.py <secucode> [--out <目录>]")
+            sys.exit("❌ --out 缺少目录参数。用法: build_online_puller.py <secucode> [--out <目录>] [--years N]")
         out_dir = args[i + 1]
+    years_limit = 10
+    if "--years" in args:
+        i = args.index("--years")
+        if i + 1 >= len(args) or not args[i + 1].isdigit() or int(args[i + 1]) < 3:
+            sys.exit("❌ --years 需为 >=3 的整数（默认 10，实际年数受接口可得年报数限制）")
+        years_limit = int(args[i + 1])
     os.makedirs(out_dir, exist_ok=True)
 
     market = detect_market(secucode)
-    if market == "a":
-        sys.exit("❌ %s 是 A 股代码，本脚本仅服务港股(.HK)/美股(.O/.N)。\n"
-                 "   A股请走原链路：westock-mcp(MCP) 或 a-stock-data skill（见 SKILL.md §1.0）" % secucode)
     if market == "unknown":
-        print("  ⚠️ 无法从后缀判市场，按美股处理。港股请写成 00700.HK，美股写成 AAPL.O / BABA.N")
+        print("  ⚠️ 无法从后缀判市场，按美股处理。港股请写成 00700.HK，"
+              "美股写成 AAPL.O / BABA.N，A股写成 601869 / 601869.SH")
         market = "us"
+    if market == "a":
+        return run_a(secucode, out_dir, years_limit)
     print("市场: %s | 代码: %s" % (market, secucode))
     collected = {}   # stmt -> (ylist, data)
     currencies = []

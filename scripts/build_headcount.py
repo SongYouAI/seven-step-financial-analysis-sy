@@ -305,11 +305,11 @@ if __name__ == '__main__':
     bad_f = [c for c in rep['checks'] if not c['func_ok']]
     bad_e = [c for c in rep['checks'] if not c['edu_ok']]
     if bad_f:
-        print(f"     ⚠️  职能合计≠职工总数: {[(c['year'], round(abs(c['func_sum']-c['total'])/c['total']*100,2)) for c in bad_f]}")
+        print(f"     ⚠️  职能合计≠职工总数: {[(c['year'], round(abs(c['func_sum']-c['total'])/c['total']*100,2) if c['total'] else '总数=0') for c in bad_f]}")
     else:
         print(f"     ✅ 职能合计(生产+销售+财务+技术+行政)=职工总数 1%内闭合(已校验年份)")
     if bad_e:
-        print(f"     ⚠️  学历合计≠职工总数: {[(c['year'], round(abs(c['edu_sum']-c['total'])/c['total']*100,2)) for c in bad_e]}")
+        print(f"     ⚠️  学历合计≠职工总数: {[(c['year'], round(abs(c['edu_sum']-c['total'])/c['total']*100,2) if c['total'] else '总数=0') for c in bad_e]}")
     else:
         print(f"     ✅ 学历合计(博士+硕士+本科+大专)=职工总数 1%内闭合(已校验年份)")
     if rep.get('func_gap_years'):

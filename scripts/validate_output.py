@@ -147,10 +147,14 @@ def check_employee(rows, years):
                 es[i] += v[i]
                 es_present[i] = True
     # 仅对"源提供了明细"的年份做闭合校验; 缺口年(明细全空)跳过, 不假失败
+    # 职工总数为 0 时不能当分母：旧版 ZeroDivisionError 直接崩掉校验器
     fdev = [abs(fs[i] - tot[i]) / abs(tot[i]) for i in range(len(years))
-            if tot[i] is not None and fs_present[i]]
+            if tot[i] is not None and abs(tot[i]) > 1e-9 and fs_present[i]]
     edev = [abs(es[i] - tot[i]) / abs(tot[i]) for i in range(len(years))
-            if tot[i] is not None and es_present[i]]
+            if tot[i] is not None and abs(tot[i]) > 1e-9 and es_present[i]]
+    zero_years = [years[i] for i in range(len(years)) if tot[i] == 0]
+    if zero_years:
+        rep.append(('员工·职工总数非零', False, '以下年份职工总数为 0: %s' % ', '.join(zero_years)))
     fgap = [years[i] for i in range(len(years)) if tot[i] is not None and not fs_present[i]]
     egap = [years[i] for i in range(len(years)) if tot[i] is not None and not es_present[i]]
     rep.append(('员工·职能合计=职工总数(<1%,源缺年跳过)', max(fdev) < 0.01 if fdev else True, f'最大{round(max(fdev)*100,3)}%' if fdev else '全部源缺跳过'))
@@ -167,10 +171,21 @@ def check_employee(rows, years):
 
 
 def check_receivable(rows, src_csv_dir=None):
+    """验证合并行修复未破坏子行：必须在【源资产负债表】上取三行。
+
+    旧版把 output.csv 当源表，而主表只输出「应收」一个汇总行，
+    三行条件永不成立，这个校验从未真正执行过。
+    """
     rep = []
-    ar = _get_row(rows, '应收账款')
-    ar_note = _get_row(rows, '应收票据')
-    ar_merged = _get_row(rows, '应收票据及应收账款')
+    src_rows = rows
+    if src_csv_dir and os.path.isdir(src_csv_dir):
+        for name in sorted(os.listdir(src_csv_dir)):
+            if '资产负债表' in name and name.lower().endswith('.csv'):
+                src_rows = _read_csv(os.path.join(src_csv_dir, name))
+                break
+    ar = _get_row(src_rows, '应收账款')
+    ar_note = _get_row(src_rows, '应收票据')
+    ar_merged = _get_row(src_rows, '应收票据及应收账款')
     if ar and ar_note and ar_merged:
         # 取第一年对比 (左新)
         def vv(r):
@@ -183,6 +198,8 @@ def check_receivable(rows, src_csv_dir=None):
         if a is not None and b is not None and m is not None:
             diff = abs((a + b) - m) / abs(m) if m else 0
             rep.append(('应收·子行求和≈合并行(<1%,验证模块1未破坏子行)', diff < 0.01, f'偏差{round(diff*100,3)}%'))
+    if not rep:
+        rep.append(('应收·子行求和对比', True, '源表未同时披露「应收账款/应收票据/合并行」三行，跳过（信息）'))
     return rep
 
 
@@ -210,6 +227,7 @@ def print_report(report):
             print(f"  {mark} {name}  ({detail})")
     print()
     print("  ✅ 全部通过" if all_ok else "  ⚠️  存在告警项(见上)")
+    return all_ok
 
 
 def main():
@@ -237,7 +255,7 @@ def main():
     if not out_csv:
         sys.exit("用法: validate_output.py <output.csv> [--src <源csv目录>] [--report <md>]")
     report = validate(out_csv, src)
-    print_report(report)
+    all_ok = print_report(report)
     if '--report' in args:
         idx = args.index('--report')
         rp = args[idx + 1]
@@ -249,6 +267,11 @@ def main():
         with open(rp, 'w', encoding='utf-8') as f:
             f.writelines(lines)
         print(f"  报告已写: {rp}")
+    # 校验失败必须非零退出；旧版只打印「⚠️ 存在告警项」仍返回 0，
+    # orchestrate 会据此判定成功并继续产出错误报告。
+    if not all_ok:
+        print('❌ 强校验存在未通过项', file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == '__main__':

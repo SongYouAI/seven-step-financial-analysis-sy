@@ -87,6 +87,8 @@ def load(path):
 # ---------- 取数 (防同名空行/小计行陷阱) ----------
 # 科目别名表: 简称 -> 全称候选 (解决用户 CSV 写简称、引擎找全称的匹配失败)
 ALIASES = {
+    # A 股标准科目常写「营业总收入」；缺此项会让营业收入整列静默归零，全链路指标报废
+    "营业收入": ["营业总收入", "营业总收入(元)", "营业收入合计", "营业收入(元)"],
     "归母净利润": ["归属于母公司股东的净利润", "归属于母公司所有者的净利润", "归属于母公司普通股股东的净利润"],
     "扣非净利润": ["扣除非经常性损益后的净利润", "扣除非经常性损益后归属于母公司股东的净利润"],
     "净利润": ["归属于母公司股东的净利润"],  # 仅作兜底, 优先级低于精确匹配
@@ -170,11 +172,24 @@ def arr(data, kws):
     return series_to_arr(s)
 
 
+# 合并科目在报表分列时的回退：仅当合并行完全找不到才拆，避免同一笔钱被算两次
+SPLIT_FALLBACK = {
+    "应付票据及应付账款": ["应付账款", "应付票据"],
+    "其他应付款合计": ["其他应付款"],
+    "应收票据及应收账款": ["应收账款", "应收票据"],
+}
+
+
 def sum_items(data, items):
     """对多个科目分别取序列后按年求和 (用于金融/经营资产负债划分)。"""
     out = [0.0] * len(YEARS)
     for it in items:
         s = get_series(data, [it])
+        if s is None and it in SPLIT_FALLBACK:
+            parts = [p for p in (get_series(data, [x]) for x in SPLIT_FALLBACK[it]) if p is not None]
+            if parts:
+                s = {y: sum(p.get(y, 0.0) for p in parts) for y in YEARS}
+                WARNINGS.append(f"合并科目「{it}」未命中，已按分列回退求和: {SPLIT_FALLBACK[it]}")
         if s is None:
             WARNINGS.append(f"未找到科目(划分用): {it}")
             continue
@@ -293,6 +308,14 @@ def main():
     管理费用 = arr(ist, ["管理费用"])
     销售费用 = arr(ist, ["销售费用"])
     财务费用 = arr(ist, ["财务费用"])
+
+    # 核心科目静默归零防护：旧版 arr() 只写一条 WARNINGS 仍正常退出 0，
+    # 会让毛利率/增长率/ROE 全部变成 0 却照常打印「生成完成」。这里硬阻断。
+    for _nm, _seq in (('营业收入/营业总收入', 营业收入), ('营业成本', 营业成本),
+                      ('归母净利润', 归母净利润)):
+        if not any(abs(v) > 1e-9 for v in _seq):
+            sys.exit("❌ 利润表未识别到「%s」：全链路指标会静默归零，已阻断。"
+                     "请检查三张原始表的科目名（尤其是否写作「营业总收入」）。" % _nm)
 
     OCF = arr(cf, ["经营活动产生的现金流量净额", "经营活动净现金流", "OCF"])
     CAPEX = arr(cf, ["购建固定资产"])
@@ -571,7 +594,21 @@ def main():
         ok = approx(资产, 负债 + 权益)
         checks.append((y, '资产平衡', f"{资产:.2f} = {负债:.2f} + {权益:.2f}", '✅' if ok else '❌'))
 
-    增长边界_ok = (营收增长率[-1] == '除数为零。' and 归母增长率[-1] == '除数为零。' and 扣非增长率[-1] == '除数为零。')
+    # 旧版只验证 growth_arr 自己写死的最旧年占位符，恒为 True；改为独立重算比对
+    def _recheck_growth(src, g):
+        if len(g) != len(src) or g[-1] != '除数为零。':
+            return False
+        for i in range(len(src) - 1):
+            d = src[i + 1]
+            exp = (src[i] - d) / d if abs(d) > 1e-9 else ''
+            got = g[i]
+            if isinstance(exp, float) and isinstance(got, float) and abs(exp - got) > 1e-9:
+                return False
+        return True
+
+    增长边界_ok = (_recheck_growth(营业收入, 营收增长率)
+                   and _recheck_growth(归母净利润, 归母增长率)
+                   and _recheck_growth(扣非净利润, 扣非增长率))
 
     # ---------- data_status.md ----------
     today = datetime.date.today().isoformat()
@@ -645,6 +682,12 @@ def main():
     print(f"资产平衡校验: {sum(1 for c in checks if c[3]=='✅')}/{len(checks)} 通过")
     print(f"增长率边界: {'通过' if 增长边界_ok else '失败'}")
     print(f"output.csv 行数: {len(rows_out)}")
+    # 校验失败必须非零退出，否则 orchestrate / 上层会误判为成功并继续交付错误报告
+    _bad = [y for y, _, _, flag in checks if flag == '❌']
+    if _bad or not 增长边界_ok:
+        print("❌ 强校验未通过：资产平衡失败年份=%s / 增长率独立重算=%s"
+              % (_bad or '无', '通过' if 增长边界_ok else '失败'), file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == '__main__':

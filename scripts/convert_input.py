@@ -48,7 +48,7 @@ def read_sheet(path):
         for row in raw:
             for i, c in enumerate(row):
                 if isinstance(c, str) and c.startswith('='):
-                    row[i] = c[1:].strip()
+                    row[i] = c[1:].strip().strip('"').strip("'")
         return raw
     sys.exit(f"❌ 不支持的文件类型: {path}")
 
@@ -56,17 +56,26 @@ def read_sheet(path):
 # ---------------------------------------------------------------------
 # 年份标签归一
 # ---------------------------------------------------------------------
+# 非年报期特征：一季报(03-31) / 半年报(06-30) / 三季报(09-30) 及其文字写法。
+# 旧版只拦 06-30 / 09-30 / H1 / Q2，一季报列会被误判成年报，与真年报撞成重复列。
+_NON_ANNUAL = (r'03[-/]31|06[-/]30|09[-/]30|3月31|6月30|9月30|'
+               r'半年度|中报|半年报|一季|三季|前三季|季报|[HQ][1-4](?![0-9])')
+
+
 def norm_year(cell):
     if cell is None:
         return None
-    s = str(cell)
+    s = str(cell).strip()
     if not re.search(r'\d{4}', s):
         return None
-    # 半年报 / 中报 / 季报 列跳过 (只保留年报列)
-    is_half = bool(re.search(r'06[-/]30|半年度|中报|半年报|H1|Q2|9月30|09[-/]30|第三季度', s))
-    if is_half:
+    if re.search(_NON_ANNUAL, s, re.I):
         return None
-    m = re.search(r'(\d{4})(?:[-/年]|$)', s)
+    # 8 位纯日期 YYYYMMDD：仅 12 月视为年报，旧正则会回溯匹配出「0630年年报」
+    m8 = re.fullmatch(r'(\d{4})(\d{2})(\d{2})', s)
+    if m8:
+        return f"{m8.group(1)}年年报" if m8.group(2) == '12' else None
+    # 锚定行首年份，避免 20250630 之类的回溯误匹配
+    m = re.match(r'^(\d{4})', s)
     if not m:
         return None
     return f"{m.group(1)}年年报"
@@ -98,11 +107,16 @@ def convert_one(path, out_dir):
         print(f"  ⚠️  {os.path.basename(path)}: 未找到年份表头, 跳过")
         return None
     header = rows[hi]
-    year_cols = []  # (col_index, 'YYYY年年报')
+    # 同年多列去重：优先保留明确标「12-31 / 年报」的列，避免季报列覆盖真年报
+    seen = {}
     for ci, c in enumerate(header):
         y = norm_year(c)
-        if y:
-            year_cols.append((ci, y))
+        if not y:
+            continue
+        explicit = bool(re.search(r'12[-/]31|1231|年年报|年报', str(c)))
+        if y not in seen or (explicit and not seen[y][2]):
+            seen[y] = (ci, y, explicit)
+    year_cols = [(ci, y) for ci, y, _ in seen.values()]
     if not year_cols:
         print(f"  ⚠️  {os.path.basename(path)}: 表头无有效年份列, 跳过")
         return None
@@ -127,7 +141,12 @@ def convert_one(path, out_dir):
                 vals.append('')
             else:
                 try:
-                    vals.append(str(float(v)))
+                    raw = str(v).strip().strip('"').replace(',', '').replace('%', '')
+                    neg = raw.startswith('(') and raw.endswith(')')
+                    if neg:
+                        raw = raw[1:-1]
+                    num = float(raw)
+                    vals.append(str(-num if neg else num))
                 except (ValueError, TypeError):
                     vals.append('')
         if all(v == '' for v in vals):
@@ -137,7 +156,8 @@ def convert_one(path, out_dir):
     base = os.path.splitext(os.path.basename(path))[0]
     out_path = os.path.join(out_dir, base + '.csv')
     os.makedirs(out_dir, exist_ok=True)
-    with open(out_path, 'w', encoding='utf-8', newline='') as f:
+    # BOM：Excel 直接打开中文表头不乱码；下游统一用 utf-8-sig 读取，兼容
+    with open(out_path, 'w', encoding='utf-8-sig', newline='') as f:
         w = csv.writer(f, lineterminator='\n')
         w.writerow(['科目'] + years)
         for r in out_rows:
@@ -155,6 +175,8 @@ def main():
     while i < len(args):
         a = args[i]
         if a == '--out':
+            if i + 1 >= len(args):
+                sys.exit('❌ --out 缺少目录参数')
             out_dir = args[i + 1]
             i += 2
             continue
@@ -177,6 +199,12 @@ def main():
         if convert_one(f, out_dir):
             ok += 1
     print(f"完成: {ok}/{len(files)} 成功转换")
+    if ok == 0:
+        print('❌ 全部文件转换失败', file=sys.stderr)
+        sys.exit(1)
+    if ok < len(files):
+        print('  ⚠️  有 %d 个文件被跳过（多为辅助表/无年份表头），请确认不是三张主表'
+              % (len(files) - ok), file=sys.stderr)
 
 
 if __name__ == '__main__':

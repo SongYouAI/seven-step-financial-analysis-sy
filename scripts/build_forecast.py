@@ -84,14 +84,18 @@ def read_input(path):
 
 def agg(rows):
     # 年份集合 (预测年, 形如 2026 / 2026E / 2027E ...)
-    years = sorted({r['年份'].strip() for r in rows if r.get('年份', '').strip()})
+    # DictReader 短行会给 None；旧版 None.strip() / r['年份'] KeyError 直接崩
+    def cell(r, k):
+        return (r.get(k) or '').strip()
+
+    years = sorted({cell(r, '年份') for r in rows if cell(r, '年份')})
     # E1/E2/E3 = 按年份升序
     e_order = years[:3]
     metrics = defaultdict(lambda: defaultdict(list))  # metric -> year -> [values]
     for r in rows:
-        y = r['年份'].strip()
+        y = cell(r, '年份')
         for m in ('营收预测', '净利预测', 'EPS预测', '目标价'):
-            v = r.get(m, '').strip()
+            v = cell(r, m)
             if v not in ('', None):
                 try:
                     metrics[m][y].append(float(v))
