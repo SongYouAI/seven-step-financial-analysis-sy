@@ -45,7 +45,13 @@ EMPTY_DATA_PATTERNS = (
     r'\bdata\s*:\s*\[\s*\]\s*[,}]',
     r'\blabels\s*:\s*\[\s*\]\s*,',   # 图16 无 peer 时 labels:[] + 3 个 data:[]
 )
-EMPTY_NOTE_RE = re.compile(r'class="chart-empty-note"[^>]*data-chart="(chart\d+)"')
+def empty_note_ids(text):
+    """P0-8：提示卡 class / data-chart 属性顺序无关，避免误判「静默空图」。"""
+    out = set()
+    for tag in re.findall(r'<div\b[^>]*\bclass="[^"]*chart-empty-note[^"]*"[^>]*>',
+                          text, re.I):
+        out.update(re.findall(r'data-chart="(chart\d+)"', tag))
+    return out
 
 
 def _managed_nodes():
@@ -106,7 +112,9 @@ def main():
         print('❌ 文件不存在: %s' % p)
         return 2
     t = p.read_text(encoding='utf-8-sig')
-    body = t[t.find('<body'):] if '<body' in t else t
+    # 正文档位独立命名：旧版 body 会被 P0-11 的内联库源码覆盖，
+    # 导致 P1-1 emoji / P1-2 Markdown 残留实际在查 JS 源码，检查恒真通过。
+    doc_body = t[t.find('<body'):] if '<body' in t else t
     p0, p1 = [], []
 
     # P0-1 占位符
@@ -124,16 +132,26 @@ def main():
     if set(canvases) != set(regs):
         p0.append('P0-2 canvas 与 __reg ID 不一致: 缺注册=%s / 缺容器=%s'
                   % (sorted(set(canvases) - set(regs)), sorted(set(regs) - set(canvases))))
+    if len(set(canvases)) != len(canvases):
+        p0.append('P0-2 canvas ID 重复 %d 个（16 个容器必须是 1—16 各一次）'
+                  % (len(canvases) - len(set(canvases))))
+    if len(set(regs)) != len(regs):
+        p0.append('P0-2 __reg ID 重复 %d 个' % (len(regs) - len(set(regs))))
     # 图表应内嵌在步骤卡里，但并非每步都有图（第8步「八问商业模式」按规范无图）。
     # 旧版逐卡要求 canvas 会对第8步误报，改为校验所有 canvas 都落在某个 step-card 内。
-    cards = re.findall(r'<div class="step-card" id="(step\d+)"[^>]*>(.*?)(?=<div class="step-card" id=|$)', t, re.S)
+    cards = re.findall(
+        r'<div class="step-card" id="(step\d+)"[^>]*>(.*?)'
+        r'(?=<div class="step-card" id=|<div id="appendix"|<footer|$)', t, re.S)
     n_in_cards = sum(block.count('<canvas') for _, block in cards)
     if n_in_cards < len(canvases):
         p1.append('P1-3 %d 个 canvas 未内嵌在 step-card（裸放在卡外）'
                   % (len(canvases) - n_in_cards))
 
     # P0-3 远程资源
-    remote = re.findall(r'(?:src|href)="(https?://[^"]+)"', t)
+    # 属性引号 / 等号空格 / CSS url() / srcset 一律归一化后再扫，防单引号绕过
+    remote = re.findall(r'(?:src|href)\s*=\s*[\"\'](https?://[^\"\']+)[\"\']', t, re.I)
+    remote += re.findall(r'url\(\s*[\"\']?(https?://[^)\s\"\']+)', t, re.I)
+    remote += re.findall(r'srcset\s*=\s*[\"\']([^\"\']*https?://[^\"\']+)[\"\']', t, re.I)
     if remote:
         p0.append('P0-3 远程资源 %d 处: %s' % (len(remote), ', '.join(remote[:3])))
     if 'cdn.jsdelivr' in t:
@@ -150,11 +168,16 @@ def main():
         if not m:
             p0.append('P0-11 图表库 %s 未内联（HTML 非自包含，单独转发会全图空白）' % _name)
             continue
-        body = m.group(2)
-        real = len(body.encode('utf-8'))
+        lib_body = m.group(2)
+        real = len(lib_body.encode('utf-8'))
         if real < _min or int(m.group(1)) < _min:
             p0.append('P0-11 内联 %s 被截断（声明 %s bytes / 实测 %d bytes）'
                       % (_name, m.group(1), real))
+        # 只量体积可被「120KB 任意 JS」绕过；必须含库特征串
+        needle = 'Chart' if _name.startswith('chart.umd') else 'ChartDataLabels'
+        if needle not in lib_body:
+            p0.append('P0-11 内联 %s 不含特征串 %s（疑似占位内容，typeof 将为 undefined）'
+                      % (_name, needle))
         inlined[_name] = real
     for _name in ('chart.umd.min.js', 'chartjs-plugin-datalabels.min.js'):
         if 'src="assets/%s"' % _name in t:
@@ -166,8 +189,8 @@ def main():
     for _b in reg_blocks:
         _m = re.search(r"__reg\('(chart\d+)'", _b)
         _cid = _m.group(1) if _m else '?'
-        if re.search(r'formatter\s*:\s*(?:v\s*=>\s*v\.toFixed|'
-                     r'function\s*\(\s*v\s*\)\s*\{\s*return\s+v\.toFixed)', _b):
+        # formatter 与 ticks.callback 都要查：Y 轴刻度同样会收到 null tick
+        if re.search(r'(?:formatter|callback)\s*:\s*[^,}]{0,80}?v\.toFixed\(', _b):
             unsafe_fmt.append(_cid)
     if unsafe_fmt:
         p0.append('P0-12 %d 张图的 formatter 未做 null 保护：%s（缺值填 null 时整图渲染失败）'
@@ -224,7 +247,7 @@ def main():
     for cid, s in re.findall(r"__reg\('(chart\d+)',(.*?)</script>", t, re.S):
         if any(re.search(p, s) for p in EMPTY_DATA_PATTERNS):
             empty_ids.append(cid)
-    noted = set(EMPTY_NOTE_RE.findall(t))
+    noted = empty_note_ids(t)
     silent = [c for c in empty_ids if c not in noted]
     if silent:
         p0.append('P0-8 静默空图 %d 张（数据为空仍画空坐标轴，且无未披露提示）: %s'
@@ -253,14 +276,14 @@ def main():
                   '页脚相对正文右移；请让 footer 成为 <body> 直接子元素')
 
     # P1-1 emoji
-    emo = sorted(set(EMOJI_RE.findall(body)))
+    emo = sorted(set(EMOJI_RE.findall(doc_body)))
     if emo:
         p1.append('P1-1 正文残留 emoji %d 种: %s' % (len(emo), ' '.join(emo[:10])))
 
     # P1-2 Markdown 残留
-    if re.search(r'\*\*[^*]+\*\*', body):
+    if re.search(r'\*\*[^*]+\*\*', doc_body):
         p1.append('P1-2 正文残留 Markdown **粗体**')
-    if '|---' in body or re.search(r'(?m)^\|[^|\n]+\|', body):
+    if '|---' in doc_body or re.search(r'(?m)^\|[^|\n]+\|', doc_body):
         p1.append('P1-2 正文残留 Markdown 表格语法')
 
     # P1-3 图表卡

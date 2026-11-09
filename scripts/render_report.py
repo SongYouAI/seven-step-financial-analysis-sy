@@ -42,6 +42,21 @@ ASSETS = SKILL / 'assets'
 CHART_ASSETS = ('chart.umd.min.js', 'chartjs-plugin-datalabels.min.js')
 BRAND_JSON = ASSETS / 'brand.json'
 
+# §14.2 图表嵌入映射：图号 -> 所属步骤。第8步「八问商业模式」按规范无图。
+# from_prefilled() 只抽 16 段 __reg 脚本，正文若不自带容器，P0-2 必然阻断；
+# 这里给生成器一个默认兜底，标题可在 content.json 的 chart_captions 里覆盖。
+DEFAULT_CHART_STEPS = {
+    1: [(1, '营业收入与归母净利润趋势'), (2, '盈利质量四关系')],
+    2: [(3, '毛利率与净利率趋势'), (4, '期间费用率趋势')],
+    3: [(5, '营收与归母净利润增长率'), (6, '历史 CAGR 与一致预期 CAGR')],
+    4: [(7, '收入结构变化趋势'), (8, '分业务板块毛利率趋势')],
+    5: [(9, '资产结构变化'), (10, '资产负债率趋势'), (11, '1 元收入所需营运资本')],
+    6: [(12, '人均收入与人均归母净利润')],
+    7: [(13, 'ROE / ROA / ROIC 趋势'), (14, '杜邦三因素拆解'), (15, '总资产与存货周转天数')],
+    8: [],
+    9: [(16, '同行关键指标对比')],
+}
+
 # ---------------------------------------------------------------------------
 # 静态骨架：全部来自 HYDRO PAPER v3.0 模板，禁止在此改颜色（改 CSS 文件）
 # ---------------------------------------------------------------------------
@@ -343,6 +358,8 @@ def from_html(path, cfg):
 
 
 def from_prefilled(path, cfg):
+    if not Path(path).exists():
+        sys.exit('❌ 预填模板不存在: %s（请先跑 build_report_data.py 产出 report_prefilled.html）' % path)
     t = Path(path).read_text(encoding='utf-8')
     regs = re.findall(r"<script>window\.__reg\('chart\d+',.*?</script>", t, re.S)
     if regs:
@@ -354,6 +371,40 @@ def from_prefilled(path, cfg):
                 cfg['years'] = json.loads(m.group(1))
             except json.JSONDecodeError:
                 pass
+    return cfg
+
+
+def chart_card(num, caption):
+    """输出完整 .chart-card（不经 clean() 包装正则，避免重复包卡）。"""
+    return ('<div class="chart-card"><div class="chart-head">'
+            '<span class="chart-idx">FIG.%02d</span>%s</div>'
+            '<div class="chart-body"><canvas id="chart%d"></canvas>'
+            '<div class="chart-skeleton"></div></div></div>'
+            % (num, esc(caption), num))
+
+
+def inject_chart_containers(cfg):
+    """幂等补齐 16 个 canvas / chart-card 容器（v2.1.3）。
+
+    正文已自带容器时零改动；只在某图缺容器时把标准卡片追加到所属步骤末尾。
+    content.json 可用 chart_captions: {"7": "自定义标题"} 覆盖默认标题。
+    """
+    steps = cfg.get('steps') or []
+    if len(steps) != 9:
+        return cfg
+    overrides = cfg.get('chart_captions') or {}
+    all_html = '\n'.join(str(s.get('html') or '') for s in steps)
+    present = set(re.findall(r'<canvas[^>]*\bid="(chart\d+)"', all_html))
+    added = 0
+    for step_no, specs in DEFAULT_CHART_STEPS.items():
+        missing = [(n, overrides.get(str(n)) or c) for n, c in specs
+                   if 'chart%d' % n not in present]
+        if missing:
+            steps[step_no - 1]['html'] = (str(steps[step_no - 1].get('html') or '') +
+                '\n' + '\n'.join(chart_card(n, c) for n, c in missing))
+            added += len(missing)
+    if added:
+        print('  ↳ 自动补齐图表容器 %d 个（§14.2 映射，正文未自带）' % added)
     return cfg
 
 
@@ -632,6 +683,19 @@ def harden_null_formatters(scripts):
         s = re.sub(
             r"formatter\s*:\s*\(\s*v\s*,\s*i\s*\)\s*=>\s*(\[[^\]]*\]\s*\[\s*i\s*\])",
             lambda m: 'formatter:(v,i)=>' + guard + '(%s)' % m.group(1), s)
+        # 形式4—6: Y 轴 ticks.callback。旧模板的 v+'%' / v.toFixed() 在
+        # Chart.js 传入 null / undefined tick 时会显示 'null%' 或抛 TypeError。
+        s = re.sub(
+            r"callback\s*:\s*v\s*=>\s*Number\(v\.toFixed\((\d+)\)\)\s*\+\s*('[^']*')",
+            lambda m: 'callback:v=>' + guard + 'Number(v).toFixed(%s)+%s'
+                      % (m.group(1), m.group(2)), s)
+        s = re.sub(
+            r"callback\s*:\s*v\s*=>\s*v\+\s*('[^']*')",
+            lambda m: 'callback:v=>' + guard + 'Number(v).toFixed(1)+' + m.group(1), s)
+        s = re.sub(
+            r"callback\s*:\s*function\s*\(\s*v\s*\)\s*\{\s*return\s+v\+\s*('[^']*')\s*;\s*\}",
+            lambda m: 'callback:function(v){return ' + guard
+                      + 'Number(v).toFixed(1)+' + m.group(1) + ';}', s)
         out.append(s)
     return out
 
@@ -754,6 +818,8 @@ def main():
         cfg = from_html(a.from_html, cfg)
     if a.prefilled:
         cfg = from_prefilled(a.prefilled, cfg)
+    # 16 图脚本由预填模板提供，容器由生成器幂等补齐（v2.1.3 · 修 P0-2 自杀式阻断）
+    cfg = inject_chart_containers(cfg)
     # data 里的显式字段优先于自动抽取（overrides 语义）
     if a.data and a.from_html:
         cfg.update({k: v for k, v in read_json(a.data).items() if v not in ('', [], None)})

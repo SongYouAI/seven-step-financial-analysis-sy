@@ -128,7 +128,15 @@ def check_employee(rows, years):
     if not any(t is not None for t in tot):
         rep.append(('员工·数据已注入(职工总数非空)', False, '职工总数全空, 注入失败/年份轴错位'))
         return rep
-    func_keys = ['生产人员', '销售人员', '财务人员', '技术人员', '行政管理人员']
+    tech = getv('技术人员')
+    rd = getv('研发人员')
+    # 源表只有「研发人员」而无「技术人员」时，职能合计用研发替位，
+    # 否则 5 项合计恒为 0，闭合校验必然假失败。
+    if not any(v is not None for v in tech) and any(v is not None for v in rd):
+        func_keys = [('研发人员' if k == '技术人员' else k)
+                     for k in ['生产人员', '销售人员', '财务人员', '技术人员', '行政管理人员']]
+    else:
+        func_keys = ['生产人员', '销售人员', '财务人员', '技术人员', '行政管理人员']
     edu_keys = ['博士', '硕士', '本科', '大专']
     fs = [0.0] * len(years)
     es = [0.0] * len(years)
@@ -163,10 +171,13 @@ def check_employee(rows, years):
         rep.append(('员工·专业构成源缺(跳过校验)', True, f'源缺: {fgap}'))
     if egap:
         rep.append(('员工·学历构成源缺(跳过校验)', True, f'源缺: {egap}'))
-    # 技术≠研发相加: 不应同时存在 技术人员 与 研发人员 行(同源时已排除研发)
-    has_tech = _get_row(rows, '技术人员') is not None
-    has_rd = _get_row(rows, '研发人员') is not None
-    rep.append(('员工·技术≠研发重复相加(不同源才并列)', not (has_tech and has_rd), '技术/研发并存(同源应仅技术)' if (has_tech and has_rd) else 'ok'))
+    # 技术≠研发相加：只有「共有非空年份数值全部相等」才是真·同源重复相加。
+    # 旧版只要两行并存就判失败，把 build_headcount.py 设计允许的
+    # 「不同源分别保留」路径也一并阻断，整条 Phase 0 流水线停摆。
+    common = [(a, b) for a, b in zip(tech, rd) if a is not None and b is not None]
+    duplicated = bool(common) and all(abs(a - b) < 1e-6 for a, b in common)
+    rep.append(('员工·技术≠研发重复相加(不同源才并列)', not duplicated,
+                '技术/研发同源重复相加' if duplicated else 'ok（不同源或仅一行有数据）'))
     return rep
 
 

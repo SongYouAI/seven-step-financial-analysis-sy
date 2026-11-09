@@ -2,17 +2,17 @@
 name: seven-step-financial-analysis
 slug: seven-step-financial-analysis-sy
 displayName: 七步财报分析
-version: 2.1.2
-author: 松幽（公众号「松幽舒苑」· 视频号「松幽Ai提效」）
+version: 2.1.3
+author: 松幽（公众号「松幽舒苑」· 视频号「松幽AI」）
 description: 基于《简明财务分析》"七步法"的升级版财报分析skill。内置指标生成引擎（scripts/ 15 个 Python 脚本）与 HYDRO PAPER 暖纸底报告皮肤（三层 CSS + 数据驱动渲染器 + HTML 交付门禁 + 图表库内联自包含单文件 + 作者溯源二维码页脚），无需额外安装依赖即可运行。严格按规范文件执行每步分析，生成独立Markdown报告+最终HTML（默认 HYDRO PAPER 皮肤，可回退深蓝金棕）+PDF双份成品报告。覆盖营收、成本、增长、业务构成、资产负债、投入产出、收益率、商业模式八问、同行对比九大环节。每步按规范要求的数据抽取和分析总结格式执行。支持三种数据来源：本地CSV、内置零依赖在线拉数（A股/港股/美股均由 build_online_puller.py 直连东财 datacenter，见§1.12/§1.13；A股可另选 westock-mcp 等外部源交叉验证）、手动输入；启动自动依赖自检并引导安装缺失数据源（见§1.0），无CSV时亦可闭环产出报告（见§1.1.1 ONLINE档）。分析前先经 Phase 0 指标生成（调用内置 scripts/ 引擎产出 output.csv 标准化指标表，见§1.11），七步分析统一读 output.csv，单入口闭环。
 ---
 
-# 七步财报分析法 Skill（v2.1.2 · 笔记风格 + HYDRO PAPER 皮肤版）
+# 七步财报分析法 Skill（v2.1.3 · 笔记风格 + HYDRO PAPER 皮肤版）
 
 > 基于饶钢《简明财务分析》提出的"七步法"，专为二级市场投资者设计。数据来源支持本地CSV / **三市场内置零依赖在线拉数**（A股 / 港股 / 美股统一走 build_online_puller.py 直连东财 datacenter；A股可另选外部 MCP 交叉验证） / 手动输入三种方式，无本地CSV时亦可经用户授权联网或MCP拉三张表闭环产出（见§1.0前置依赖自检 与 §1.1.1 ONLINE档、§1.12 港美股拉数、§1.13 A股 ONLINE）。分析前先经 **Phase 0 指标生成**（调用内置 `scripts/` 引擎，把任意来源的财务数据组装成三张原始表 → 产出 `output.csv` 标准化指标表 + 辅助CSV，见§1.11），七步分析统一读 `output.csv` 与 Phase 0 辅助CSV，单入口闭环。使用预定义HTML模板（`report_template.html`）进行占位符填充，确保输出报告CSS一致、图表可用。启动自动依赖自检并引导安装缺失数据源（见§1.0），按资料丰度自适应验证（见§1.1.1），异常点强制✅闭环。
 
 > **作者信息（Author & Attribution）**
-> 本 Skill 由 **松幽** 创作并维护。公众号「**松幽舒苑**」、视频号「**松幽Ai提效**」持续分享 AI 提效实战技巧、企业财报分析框架与投资研究方法论。本 Skill 以 MIT 协议开源，转载、二次分发、上架至任意 WorkBuddy 兼容商店时，请**保留此署名区块与上方 `author` 字段**。
+> 本 Skill 由 **松幽** 创作并维护。公众号「**松幽舒苑**」、视频号「**松幽AI**」持续分享 AI 提效实战技巧、企业财报分析框架与投资研究方法论。本 Skill 以 MIT 协议开源，转载、二次分发、上架至任意 WorkBuddy 兼容商店时，请**保留此署名区块与上方 `author` 字段**。
 >
 > **在线拉数数据源归属**：港股/美股自动联网拉取三表功能，数据源来自 `global-stock-data`（作者 Simon 林，Apache-2.0，GitHub: simonlin1212/global-stock-data）。本 Skill 仅调用其东财 datacenter 三表接口，并经内置 `scripts/build_online_puller.py` 适配层转换，保留上游 attribution。
 > **A 股（v2.0.2 新增）**：走东财 datacenter F10 公开接口 `RPT_F10_FINANCE_G{BALANCE,INCOME,CASHFLOW}`，字段映射 `A_FIELD_MAP`、代码规范化与期次隔离均由本 Skill 自建实现；数据归属东方财富，仅作公开财报结构化读取，**不含任何凭据或私有接口**。
@@ -98,7 +98,7 @@ description: 基于《简明财务分析》"七步法"的升级版财报分析sk
 （若暂时不想装数据源：直接说「先用 WebSearch 拉」，我走 WebSearch 独立拉数兜底（§1.10）仍出报告）
 ```
 
-### 1.1.1 资料丰度三档评估（客观决策树，降AI主观误判）
+### 1.1.1 资料丰度四档评估（客观决策树，降AI主观误判）
 
 启动后按以下客观阈值判定当前资料档位，**自动归入、不强行追问用户**；判定结论写入报告「数据来源与口径说明」框，并标注当前处于 RICH/MEDIUM/LEAN 哪一档，读者一眼可知本报告可信度档位。
 
@@ -123,7 +123,7 @@ description: 基于《简明财务分析》"七步法"的升级版财报分析sk
 | **异常点必须✅闭环** | 每点终态只能是：✅已验证（引PDF/年报原文）或 ✅已解释（引招股书/CSV/行业常识旁证）；真无源→⚠️数据缺口（方向说明+🥉），**严禁留⚠️未验证/❌无法验证/部分解释** |
 | CSV列序需确认 | 先检查列标题年份方向（新→旧 或 旧→新） |
 | **零幻觉** | 每个数字必须可追溯到§1.4某档来源；irm互动记录禁止作为公司确认事实（见§1.6） |
-| **数据来源归口（Phase 0）** | 核心第1–7步指标读 `output.csv` 指标名行（见§1.11 命名与「步骤标题块+指标名」二维定位）；第4步业务构成/第6步人员效率/第3步前瞻读 Phase 0 在 `02_指标产出/` 产出的**辅助CSV**（segment/headcount/forecast），非 output.csv 核心列；第8步八问/第9步同行=推理叙事不读行；**禁再读原始三张表**（原始表仅 Phase 0 输入用） |
+| **数据来源归口（Phase 0）** | 核心第1–7步指标读 `output.csv` 指标名行（见§1.11 命名与「步骤标题块+指标名」二维定位）；**第4步业务构成 / 第6步人员效率由 `build_segment.py` / `build_headcount.py` 注入 `output.csv` 对应步区域**（不是独立辅助CSV，见§1.11 数据契约②）；第3步前瞻读伴侣文件 `forecast_consensus.csv`；第8步八问/第9步同行=推理叙事不读行；**禁再读原始三张表**（原始表仅 Phase 0 输入用） |
 
 ### 1.3 异常点回溯触发条件
 
@@ -237,11 +237,11 @@ description: 基于《简明财务分析》"七步法"的升级版财报分析sk
 **输入**：
 - **必选**：3 张原始表（资产负债表 / 利润表 / 现金流量表 CSV），来自方式A/B/C/D 的组装结果（见§1.0/§1.1.1/§1.10）
 - **可选模块输入**（有则跑、无则优雅跳过，落同目录）：
-  - `segment.xlsx`（分产品/分地区收入）→ 业务构成（第4步）
-  - `headcount.xlsx`（员工人数/薪酬/研发人员）→ 人员效率（第6步）
-  - `forecast_input.csv`（券商一致预期明细）→ 经 `build_forecast.py` 产出伴侣文件 `forecast_consensus.csv`（前瞻，第1/3步读取）
+  - `按产品*.xlsx` + `按地区*.xlsx`（**两个文件须同时存在**，`orchestrate.py` 的 `find_file()` 分别匹配 `*按产品*/*segment*` 与 `*按地区*/*region*`，只给一个会静默跳过第4步）→ 业务构成（第4步）
+  - `员工*.xlsx`（员工人数/薪酬/研发人员）→ 人员效率（第6步）
+  - `forecast_input.csv`（券商一致预期明细）→ **须显式传 `--forecast`** 或在产出目录预置 `forecast_consensus.csv`；经 `build_forecast.py` 产出伴侣文件（前瞻，第1/3步读取）
 
-> **辅助输入格式约束（V7 实跑验证）**：`segment`/`headcount` 须为 **xlsx/xls** 格式——metrics-csv 引擎的 `build_segment.py`/`build_headcount.py` 仅吃 xlsx/xls（纯 csv 辅助输入会被**优雅跳过、不报错**，见§1.11 验证实录）。ONLINE/WebSearch 产出的辅助数据若为 csv，第4步业务构成/第6步人员效率将标 ⚠️数据缺口（方向：待补 xlsx 版 segment/headcount）；要业务构成/人员效率请用 xlsx 源（如 `00_源数据_原始财报/` 的 xlsx）。forecast 经 `build_forecast.py` 注入无此限制。
+> **辅助输入格式（v2.1.3 校正）**：`build_segment.py` 的 `_load_rows()` 与 `build_headcount.py` 的 `read_employee()` **同时支持 xlsx/xls 与 csv**（回归测试用 CSV 构造用例并断言解析成功）。旧版此处写「仅吃 xlsx/xls、纯 csv 会被优雅跳过」与代码不符，已删除。ONLINE/WebSearch 产出的辅助数据为 csv 时可直接喂入；若第4/6步仍缺数据，先核对上面的「按产品 + 按地区双文件」与 `--forecast` 传参，不要归因于扩展名。
 
 **调用（跨机器可移植，自动探测 Python 路径）**：
 ```bash
@@ -992,9 +992,11 @@ Step 5: 产出验证报告MD + 更新最终投资建议
 
 ## 十三、最终HTML报告生成
 
-### 13.1 生成方案：模板占位符填充
+### 13.1 生成方案：数据驱动（模板填充路径已废弃）
 
-使用预定义 `report_template.html`，AI 只做 **{{占位符}} 替换**，不修改CSS/结构。
+> **v2.1.3 起：`report_template.html` 只作占位符与 16 图脚本的来源**。`build_report_data.py` 读它产出 `report_prefilled.html`，再由 `render_report.py --data content.json --prefilled …` 生成最终 HTML（见 §19.4）。**禁止手工替换占位符后把模板当成品交付**：模板仍带 `<script src="assets/…">`，不满足 §19.5.2 自包含契约，会被 P0-11 阻断。
+
+`report_prefilled.html` 是中间产物，不是交付物。
 
 ### 13.2 模板文件清单
 
@@ -1004,6 +1006,20 @@ Step 5: 产出验证报告MD + 更新最终投资建议
 | `assets/chart.umd.min.js` | `skills/seven-step-financial-analysis/assets/` | Chart.js v4.4.1；由 `render_report.py` **整段内联**进 HTML（v2.1.2 起报告零同目录依赖） |
 | `assets/chartjs-plugin-datalabels.min.js` | `skills/seven-step-financial-analysis/assets/` | 数据标签插件 v2.2.0；同样整段内联 |
 | `verification_template.md` | `skills/seven-step-financial-analysis/` | 验证报告模板（Phase 2使用） |
+
+**运行期强依赖清单（分享打包必须全带，缺任一即出不了报告）**：
+
+| 文件 | 读取方 | 缺文件行为 |
+|---|---|---|
+| `assets/hydro-base.css` / `hydro-skin.css` / `sevenstep-adapt.css` | `render_report.py::load_css()` | `sys.exit` |
+| `assets/chart.umd.min.js` / `chartjs-plugin-datalabels.min.js` | `inline_lib()` / `copy_assets()` | `sys.exit`（最终 HTML 整段内联） |
+| `assets/brand.json` | `load_brand()` | `sys.exit`（含双二维码 base64） |
+| `assets/qr-wechat.png` / `qr-video.png` | `qr_data_uri()` 回退源图 | 可选：`brand.json` 已内嵌 base64，缺 PNG 仍能出图（商店版） |
+| `scripts/*.py` 全部 15 个 | `orchestrate.py` 模块 0–9 | 缺对应模块即流水线失败 |
+| `references/*.md` 全部 7 个 | 质检器 / 词典 / 标尺库 | 术语释义、R2/R3 校验失效 |
+| `tests/` | 发布前自检 | 不随报告出稿，但分享版应带上 |
+
+> `_meta.json` 是 `build_online_puller.py` 在 ONLINE 档**运行时写出**的产物，不是 skill 自带元数据；分享包不包含它。
 
 ### 13.3 占位符清单
 
@@ -1028,12 +1044,14 @@ Step 5: 产出验证报告MD + 更新最终投资建议
 
 **步骤级**（替换9次）：`{{STEP1_CONTENT}}` ~ `{{STEP9_CONTENT}}`
 
-**图表数据**：共 **16 张图 / 34 个数据占位符**，`{{CHART1_DATA_REVENUE}}` ~ `{{CHART16_DATA_DEBT_RATIO}}` 等。其中图16 的 4 个同行占位符仅在提供 `--peer <peer_comparison.csv>` 时自动填，否则保留给第9步手填（旧版无条件写 `[]`，会永久覆盖成空图）。
+**图表数据**：共 **16 张图 / 33 个数据占位符**，`{{CHART1_DATA_REVENUE}}` ~ `{{CHART16_DATA_DEBT_RATIO}}` 等。图16 的 4 个同行占位符：未提供 `--peer <peer_comparison.csv>` 时 `build_report_data.py` 无条件写 4 个空数组，`render_report.py` 自动换成「未披露」提示卡（P0-8 反向校验），不得手工填数。旧版「保留给第9步手填」的描述与代码相反，已校正。
 
 **业务板块（支持 N 段）**：
 - `{{BUSINESS_SEGMENT_NAMES}}`：板块名数组（JSON），如 `['白酒','系列酒','其他']`
 - `{{CHART7_DATA_SEGMENTS}}`：各板块收入占比序列（JSON 数组的数组），`[[...],[...],[...]]` 与 NAMES 顺序对应
 - `{{CHART8_DATA_SEGMENTS}}`：各板块毛利率序列（JSON 数组的数组），同上
+
+> **单位归一（v2.1.3）**：`build_report_data.py::normalize_pct_matrix()` 把**整张图**的全部板块序列统一到「% 数值」单位（65.79 而非 0.6579）。`build_segment.py` 原样写入的分业务行可能是小数分数（长江电力实测 `0.6579`），也可能是百分比数值（宁德样例 `23.0`）。判定按「全图非空值最大绝对值 ≤ **1.0** 视为分数」，整图只用一套尺度；阈值用 1.5 会把真实的 1.2% 占比 ×100 成 120%。非数值填 `None`。同图内出现小数与百分比混合形态时打印显式告警、不猜单值。禁止一律 `as_is()`（0.6579 显示成 0.6579%）或一律 `to_pct()`（23.0 → 2300）。模板 8 处 Y 轴 ticks 统一用 `(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'`，既消浮点长尾也防 null tick 抛错。
 
 > ⚠️ **v6.5 起废弃旧占位符** `{{BUSINESS_SEGMENT_1_NAME}}` / `{{BUSINESS_SEGMENT_2_NAME}}` / `{{CHART7_DATA_SEGMENT1_RATIO}}` / `{{CHART7_DATA_SEGMENT2_RATIO}}` / `{{CHART8_DATA_SEGMENT1_GROSS_MARGIN}}`（仅支持 2 段，多业务被截断）。统一改用上方 N 段占位符。
 
@@ -1166,59 +1184,42 @@ P0 阻断（退出码 1），P1 默认告警，`--strict-p1` 可提升为阻断�
 
 ### 14.2.1 图表容器嵌入语法（必读 · 否则图表不渲染）
 
-> **关键规则**：模板用 `<canvas id="chartN">` 渲染图表（Chart.js 4）。`STEP_CONTENT` 是 markdown+HTML 混合内容，AI 写每步正文时**必须按以下结构嵌入 canvas 容器**，否则图表区是空 HTML 容器、打开报告看不到图。
+> **关键规则（v2.1.3）**：16 个 `<canvas>` 容器与 16 段 `window.__reg` 脚本必须一一对应，且都落在 `step-card` 内（P0-2 / P1-3）。`from_prefilled()` 只抽脚本，**默认不写容器也能出图**：`render_report.py::inject_chart_containers()` 按 §14.2 映射幂等补齐 16 个 `.chart-card`（含 `.chart-idx` 编号徽章）；正文已自带容器的步骤零改动。标题可用 `content.json` 的 `chart_captions: {"7": "…"}` 覆盖。
 
-**标准嵌入片段**（每个图表复制一份，`canvas id` 与图表编号一致）：
+**需要自定义图表位置时**，在对应步骤 HTML 里写完整卡片：
 
 ```html
-<div class="chart-body">
-  <canvas id="chart1"></canvas>
-  <div class="chart-skeleton"></div>
+<div class="chart-card">
+  <div class="chart-head"><span class="chart-idx">FIG.01</span>营业收入与归母净利润趋势</div>
+  <div class="chart-body"><canvas id="chart1"></canvas><div class="chart-skeleton"></div></div>
 </div>
 ```
 
-**完整 STEP_CONTENT 模板**（第1步示例，markdown + 笔记风格文字 + 图表容器）：
+或写「裸图注 + 裸画布」标准片段，由 `clean()` 自动包卡：
 
-```markdown
-<section id="step1" class="step-card">
-
-## 第1步：看营收数据（意义：建立基本面轮廓，评估盈利质量）
-
-**目的**：先摸清这家公司有多大、赚不赚钱、钱赚得实不实。
-
-### 一、规模与成长
-[此处填数据 + 分析文字，笔记风格]
-
-### 二、盈利质量四关系
-[此处填扣非/OCF/自由现金流分析，笔记风格]
-
-<div class="chart-body">
-  <canvas id="chart1"></canvas>
-  <div class="chart-skeleton"></div>
-</div>
-
-<div class="chart-body">
-  <canvas id="chart2"></canvas>
-  <div class="chart-skeleton"></div>
-</div>
-
-### 三、告诉普通投资者
-- 1) 先看体量 ...
-- 2) 再看含金量 ...
-
-### 四、异常点
-| 年份 | 异常点 | 状态 |
-|------|--------|------|
-
-</section>
+```html
+<p style="font-size:12px;color:var(--text-secondary);margin:22px 0 6px;">图1 · 营业收入与归母净利润趋势</p>
+<div class="chart-body"><canvas id="chart1"></canvas><div class="chart-skeleton"></div></div>
 ```
+
+**content.json 正文示例**（第1步；正文是 HTML 片段，不是 Markdown）：
+
+```json
+{"steps": [
+  {"html": "<h3>一、规模与成长</h3><p>2025 年营收 862.42 亿元……</p>"},
+  {"html": ""}, {"html": ""}, {"html": ""}, {"html": ""},
+  {"html": ""}, {"html": ""}, {"html": ""}, {"html": ""}
+]}
+```
+
+生成器统一输出 `<div class="step-card" id="stepN">`（P0-7 门禁按此匹配），并自动把图1 / 图2 的卡片追加到第1步末尾。
 
 **硬性要求**：
-- 每步的 `STEPn_CONTENT` 必须**包裹在 `<section id="stepN" class="step-card">...</section>` 中**（侧栏导航、滚动高亮、按页打印都依赖这个类名）
-- 该步对应图表的 `<canvas id="chartN">` 容器**必须出现在该步的 STEPn_CONTENT 内**（canvas 容器在哪里，就在哪里渲染图表）
-- canvas 容器顺序可自由安排（一般放在文字叙述之后或关键数据之后），但**不能漏**
-- 多图步骤（图1/图2 在第1步）就放多个 `<canvas id="chartN">` 容器
-- `chart-skeleton` 是加载占位符，可选但建议保留（图表渲染成功后会自动隐藏）
+- `steps` 必须恰好 9 项；每项 `html` 是 **HTML 片段**，不得含 `**粗体**` / `|---` 等 Markdown 残留（P1-2）；表格须包 `class="table-wrap table-scroll"`（P1-4）。
+- **不要**自己写 `<section id="stepN" class="step-card">`：生成器写的是 `<div>`，手写 `<section>` 会让 P0-7 数到 0 个 step-card。
+- 16 个 canvas 与 16 个 `__reg` ID 一一对应且不得重复（P0-2）；`.chart-card` / `.chart-idx` 各 16 个（P1-3）。
+- 第8步按规范无图；其余 8 步的图号见 §14.2 映射，顺序不得改。
+- `chart-skeleton` 是加载占位符，建议保留；空数据图由 `mark_empty_charts()` 自动换「未披露」提示卡，canvas 保留但 `hidden`。
 
 ---
 
@@ -1371,6 +1372,7 @@ v6.1 的 ONLINE 落 `online_cache.csv` 单文件，但方式A 读的是 3 个分
 | **v7.3** | **2026-09-23** | **内容质检新增 R8「百分比量纲」规则（`|x|>1000%` 判为量纲错误）+ 新增经验#22（交付前必跑 `validate_content.py`，含 R1–R8 规则表与修警告姿势）；源自「自由现金流FCF」绝对元值被当比率渲染成 `-26277008100.00%` 而 R1–R7 全部漏检的事故。 |
 | **v7.2** | **2026-09-22** | **前瞻一致预期取数铁律 + 主源优先聚合（与 dynamic-valuation 同源事故修复）：① 新增 §1.11-b「前瞻一致预期取数铁律」P0 —— 必须本轮联网取数、禁止复用旧 `forecast_input.csv`/`forecast_consensus.csv`、**必须取东财「当前预测」而非「上一个月预测」**（实测片仔癀 FY3：当前 28.57亿/7家 vs 上一个月 31.13亿/4家，差约9%）、取数留痕（来源+日期+覆盖机构家数）与 `EPS×总股本≈归母净利` 复核；② `build_forecast.py` v3.1 **主源优先聚合**——`口径标注` 含「权威主源」的行才是共识唯一真相源，单券商行降级为「离散度旁证」仅入 `forecast_discrete.csv`、**不参与 `forecast_consensus.csv` 均值**（修复原「多机构聚合 vs 单券商等权」失真）；主源 `来源日期` >30天 触发**新鲜度告警**；③ 模板 `report_template.html` 图6「预期CAGR」窗口由硬编码 `2026E-2028E` 改为动态 `{{EXP_SPAN}}`（未注入时回退通用表述，不再写死年份），与实际 `最新A→E3 三年复合` 口径一致** |
 | **v7.0** | **2026-08-03** | **报告叙事层改版（笔记风格）：① 结论模板全面从「一问·二算·三标·四链·五用」机械框架改为老板原始笔记行文——动词式标题「第X步：看XXX（意义：XXX）」+「目的→数据抽取→做什么/为什么/怎么看→告诉普通投资者」自然结构；② 每步保留数据抽取表格、图表嵌入（16图）与异常点闭环，图表数据仍走 `build_report_data.py` 自动生成；③ 判断"优/良/警戒"改为大白话说明依据，反面可能「也可能是…」保留为写作要求；④ 术语词典/反面假设清单/阈值标尺库保留为 references 写作弹药（内部使用），不再以强制标签呈现给读者；⑤ 保留商店版全部视觉化图表与深蓝金棕 CSS（v6.3 模板资产）** |
+| **v2.1.3** | **2026-11-09** | **分享前全量审计与修复（长江电力报告实跑暴露的 skill 自身缺陷）**：① **P0 `check_html.py` 的 `body` 变量被 P0-11 内联库源码覆盖**，导致 P1-1 emoji / P1-2 Markdown 残留实际在查 JS 源码、`--strict-p1` 也恒真放行 → 正文独立命名 `doc_body`，并补负向回归；② **P0 生成器产不出 16 个 canvas 容器**：`from_prefilled()` 只抽 16 段 `__reg` 脚本，按 skill 规范写正文必然被自己的 P0-2 阻断（上一轮靠报告侧外挂脚本绕过）→ 新增 `DEFAULT_CHART_STEPS` + `inject_chart_containers()` 幂等自动补容器，§14.2.1 同步改为 HTML 片段契约；③ **单位量纲**：`normalize_pct_series()` 逐板块判尺度 + 阈值 1.5 会让同一图出现两套量纲、真实 1.2% 被 ×100 → 改 `normalize_pct_matrix()` 整图统一尺度 / 阈值 1.0 / 脏值 null / 混合形态告警；模板 8 处 Y 轴 ticks 统一 null 安全格式化；④ **Phase 0 误阻断**：`validate_output.py` 只要技术/研发两行并存即判失败，把 `build_headcount.py` 设计允许的「不同源分别保留」也拦下 → 改为按共有非空年份数值判定真重复；无技术数据时用研发替位，避免职能合计恒为 0；⑤ **门禁加严**：P0-2 查 ID 唯一性、P0-3 归一化属性引号/空格 + CSS `url()`/`srcset`、P0-11 查库特征串（防 120KB 任意 JS 绕过）、P0-12 覆盖 `ticks.callback`、P0-8 提示卡属性顺序无关、P1-3 末卡边界；⑥ 其他：`parse_peer()` 缺值不再编造 0%、`hist_cagr([])` 不崩、`build_forecast` 短行 KeyError 与多格式日期、`from_prefilled` 缺文件显式报错；⑦ 文档统一：视频号「松幽AI」、§13.1 废弃模板填充路径、§13.2 完整依赖清单、§1.11 双文件/CSV/--forecast 约定、§1.2 数据归口、版本历史追加。**回归：31/31 unittest 通过 + 3 项既有脚本式用例通过。** |
 | **v2.1.2** | **2026-11-09** | **图表库自包含 P0 修复（报告单独转发即全图空白）**：老板截图反馈「图表库未加载：请确认同目录存在 assets/」+「FIG.01 卡片全白」。**实测复现**：`_release_v2.1.1/` 下成品 `typeof Chart = undefined`、两个 `ERR_FILE_NOT_FOUND`、16/16 canvas 零绘制、17 个 console/page error；同一份 HTML 放在带 `assets/` 的目录则 `Chart = function`、16/16 绘制、0 错误。**两层原因**：① 交付时把成品 HTML 单文件复制到新目录漏带 `assets/`（本次执行疏漏）；② **skill 契约漏洞** —— v2.1.1 及以前用 `<script src="assets/chart.umd.min.js">`，报告不是自包含单文件，而 `check_html.py` 只把「本地图表库存在」列为 **P1-6 警告**，默认门禁放行残缺报告。① `render_report.py` 新增 `inline_lib()`，`build_scripts()` 改为整段内联 Chart.js 4.4.1 + datalabels 2.2.0（+218KB，成品 854,811 bytes），HTML 零远程、零同目录依赖；② `check_html.py` 新增 **P0-11**（内联标记 + 字节数 + 禁止相对 `assets/` 引用），P1-6 改为仅当存在相对引用时才校验；③ SKILL.md / `hydro-design-spec.md` 补自包含契约。**回归**：生成到完全无 `assets/` 的空目录，真实浏览器 `typeof Chart=function` / `ChartDataLabels=object`、**16/16 canvas 真实着色**（最少 1455 采样点）、`#chart-error` 隐藏、console 0 错误；22 段内联 JS `node --check` PASS；P0=0/P1=0；负向用例旧 v2.1.1 成品精确命中 4 条 P0-11。**属 skill bug，与财报数据/图表脚本无关，所有 v2.1.1 及以前的报告单独复制都会全图空白。** **同一轮闭环回归另抓到并修复图6 白图（P0-12）**：A 股 ONLINE 无一致预期时 `build_report_data.py` 按「缺值填 null 做断点、不编造」写 `data:[null, null]`，但 datalabels 的 `formatter:v=>v.toFixed(1)+'%'` 未做 null 保护，Chart.js 为 null 点调用 formatter 抛 `TypeError: Cannot read properties of null`，**整张图渲染失败**（实测 15/16 绘制、1 个 console error）。① `render_report.py` 新增 `harden_null_formatters()`，统一加固 3 种 formatter 写法（箭头函数 / function(v) / (v,i) 多单位），null 返回空串而不崩图，且不触碰内联库；② `check_html.py` 新增 **P0-12**，只扫 16 段 `__reg`（不误伤 Chart.js 内部 formatter），发现裸 `v.toFixed` 立即阻断，负向用例修复前报告精确命中 chart6/7/10/16 共 4 张。修复后闭环报告 **16/16 绘制、console 0 错误、P0=0/P1=0**。 |
 | **v2.1.1** | **2026-11-09** | **页脚层级 P0 修复（v2.1.0 移植时漏掉的 DOM 契约）**：老板截图反馈「最下方二维码区块跑到页面中间」。实测三档视口：七步 v2.1.0 成品 `.brand-block` 相对正文卡片右移 48px（1060）/ 248px（1440、1600），八维长江电力模板偏移 0。**根因：只搬了八维 brand CSS，没搬 DOM 层级**—— 八维 `<footer>` 是 `<body>` 直接子元素，七步 `render_report.py` 却把 `render_brand_footer()` 随 `build_appendix()` 塞进 `.main-wrap`；`.main-wrap` 与 `.report-footer` 各自带 `padding-left:48px`（≥1200px 时 248px，给固定侧栏让位），嵌套即双重偏移。① `render_report.py`：`build_appendix()` 只返回附录 step-card，footer 由 `build()` 挂在 `</div.main-wrap>` 之后，与八维模板一致；② `check_html.py` 新增 **P0-10**（`footer_inside_main_wrap()` 栈解析：footer 不得嵌在 `.main-wrap` 内），负向用例旧成品命中、正向用例八维模板与构造样例均放行；③ §19.5 / §19.5.1 补 DOM 契约与坐标验收标准。回归：三档视口 `brand x − appendix x = 0`、三模式 A/B/C `P0=0/P1=0`、二维码 2 张、远程资源 0。**属 skill bug，与 content.json / 生成参数无关，所有 v2.1.0 报告均受影响。** |
 | **v2.1.0** | **2026-11-09** | **作者溯源二维码 brand 页脚沉淀**：按长江电力八维报告末尾区块、模仿八维 skill 实现。① 新增 `assets/brand.json`（公众号「松幽舒苑」/ 视频号「松幽AI」+ 两张二维码 base64；`title`/`method` 改七步署名；**移除两个远程 OSS URL**）、`assets/qr-wechat.png` / `qr-video.png` 源图；② `sevenstep-adapt.css` 追加八维 HYDRO PAPER v3.2.2 页脚 CSS；③ `render_report.py` 新增 `load_brand()` / `qr_data_uri()` / `render_brand_footer()` / `QR_LIGHTBOX_JS`，**brand 区块强制输出**（content.json 不可关闭）、旧 `footer_html` 不重复渲染、base64 字符集校验；④ `check_html.py` 新增 **P0-9**（brand-block / lightbox / 2 按钮 / 2 data URI / 渠道标识），负向用例删标记即阻断；⑤ `capture.py` 新增 `--section footer` 并纳入 `--all`。与八维差异：七步 P0-3 禁远程，故**不支持 `branding.url`**。回归：三模式 A/B/C 均 `P0=0/P1=0`、二维码 2 张、远程资源 0、20 段 JS PASS；真实浏览器验证两码加载（556×550 / 598×550）、点击放大 + ESC 关闭；页脚截图目视整洁无重叠。** |
@@ -1407,6 +1409,8 @@ v6.1 的 ONLINE 落 `online_cache.csv` 单文件，但方式A 读的是 3 个分
 
 CSS 注入顺序固定：`hydro-base` → `hydro-skin` → `sevenstep-adapt`（后者优先级最高）。
 换肤只需替换 `hydro-skin.css`，**不要改 `report_template.html`**。
+
+> v2.1.3：完整运行期强依赖清单（含 `assets/brand.json`、`scripts/*.py`、`references/*.md`）见 §13.2；上表只列皮肤层，不作为打包依据。
 
 ### 19.3 content.json 字段
 
@@ -1534,6 +1538,21 @@ P1：emoji / Markdown 残留、图表卡与表格滚动容器覆盖、Hero 数�
 - 期次隔离（如 2026 前三季度不并入十年序列）目前靠 `content.json` 的 `quarantine` 字段与人工纪律，无自动检测。
 - A 股 ONLINE 档已内置（v2.0.2，见 §1.13）；但**东财 F10 与其他数据源存在口径差异**（基准缺失科目、2017 准则列示、2018 追溯重述），换源后 `output.csv` 派生指标会变，**不得声称「零差异」**，须按 §1.13 逐项定性。
 - 本目录与 `seven-step-financial-analysis-sy__skillhub` 是同源双版本，尚未合并；触发时以本目录为准。
+
+### 19.7 发布前自检（v2.1.3）
+
+在 skill 根目录执行：
+
+```bash
+python3 -m unittest discover -s tests -v     # 31 项 unittest 回归（含本次 P0/P1 负向用例）
+python3 tests/test_segment_and_metrics.py     # 3 项脚本式业务板块用例
+python3 -m py_compile scripts/*.py
+python3 scripts/validate_content.py --selftest
+```
+
+- `tests/test_segment_and_metrics.py`：脚本式业务板块用例；`tests/test_regressions.py`：unittest 回归用例。
+- 门禁负向用例必须保留：`check_html.py` 的 P1-1 / P1-2 曾因 `body` 变量被内联库源码覆盖而恒真通过，回归用例用真实子进程验证「坏输入确实被报出」。
+- 商店版可不带 `assets/qr-*.png`：`brand.json` 已内嵌两张二维码 base64，`qr_data_uri()` 优先读 base64、回退读源图。
 
 ---
 

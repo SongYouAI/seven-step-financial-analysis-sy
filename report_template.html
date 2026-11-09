@@ -847,8 +847,8 @@ body {
   ]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{title:{display:false,text:'图3：毛利率与净利率趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
-    scales:{y:{type:'linear',position:'left',title:{display:true,text:'毛利率（%）'},ticks:{callback:v=>v+'%'}},
-      y1:{type:'linear',position:'right',title:{display:true,text:'净利率（%）'},grid:{drawOnChartArea:false},ticks:{callback:v=>v+'%'}}}
+    scales:{y:{type:'linear',position:'left',title:{display:true,text:'毛利率（%）'},ticks:{callback:v=>(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'}},
+      y1:{type:'linear',position:'right',title:{display:true,text:'净利率（%）'},grid:{drawOnChartArea:false},ticks:{callback:v=>(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'}}}
   }
 });</script>
 
@@ -861,7 +861,7 @@ body {
   ]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{title:{display:false,text:'图4：期间费用率趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
-    scales:{y:{title:{display:true,text:'费用率（%）'},ticks:{callback:v=>v+'%'}}}
+    scales:{y:{title:{display:true,text:'费用率（%）'},ticks:{callback:v=>(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'}}}
   }
 });</script>
 
@@ -873,7 +873,7 @@ body {
   ]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{title:{display:false,text:'图5：营收与归母净利润增长率（'+window.__yearSpanGrowth+'）',font:{size:16}},datalabels:{display:false}},
-    scales:{y:{title:{display:true,text:'增长率（%）'},ticks:{callback:v=>v+'%'}}}
+    scales:{y:{title:{display:true,text:'增长率（%）'},ticks:{callback:v=>(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'}}}
   }
 });</script>
 
@@ -885,7 +885,7 @@ body {
   ]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{title:{display:false,text:'图6：历史CAGR vs 预期CAGR对比',font:{size:16}},datalabels:{display:true,formatter:v=>v.toFixed(1)+'%',anchor:'end',align:'top',offset:6,font:{size:12,weight:'bold'},color:'#1a1a2e'}},
-    scales:{y:{ticks:{callback:v=>v+'%'}}}
+    scales:{y:{ticks:{callback:v=>(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'}}}
   }
 });</script>
 
@@ -904,7 +904,7 @@ body {
       datalabels:{display:function(c){return c.dataset.data[c.dataIndex]>3;},
         formatter:function(v){return v.toFixed(1)+'%';},color:'#fff',font:{size:10,weight:'bold'}}},
     scales:{x:{stacked:true,grid:{display:false}},
-      y:{stacked:true,min:0,max:100,title:{display:true,text:'占比（%）'},ticks:{callback:function(v){return v+'%';}}}}}};
+      y:{stacked:true,min:0,max:100,title:{display:true,text:'占比（%）'},ticks:{callback:v=>(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'}}}}};
 })());</script>
 
 <script>window.__reg('chart8',(function(){
@@ -912,7 +912,7 @@ body {
   var series={{CHART8_DATA_SEGMENTS}};
   var pal=['#1e5fb4','#b71c1c','#c8943b',window.__c.blue2,'#2e8b57','#4682b4'];
   var ds=names.map(function(nm,i){return {label:nm+'毛利率（%）',data:series[i]||[],borderColor:pal[i%pal.length],backgroundColor:'rgba(30,95,180,0.1)',fill:true,tension:0.3,pointRadius:5};});
-  return {type:'line',data:{labels:window.__years,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:false,text:'图8：分业务板块毛利率趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},scales:{y:{ticks:{callback:v=>v+'%'}}}}};
+  return {type:'line',data:{labels:window.__years,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:false,text:'图8：分业务板块毛利率趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},scales:{y:{ticks:{callback:v=>(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'}}}}};
 })());</script>
 
 <script>window.__reg('chart9',{
@@ -934,7 +934,7 @@ body {
   ]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{title:{display:false,text:'图10：资产负债率趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:true,formatter:v=>v.toFixed(2)+'%',align:'end'}},
-    scales:{y:{ticks:{callback:v=>v+'%'}}}
+    scales:{y:{ticks:{callback:v=>(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'}}}
   }
 });</script>
 
@@ -971,7 +971,7 @@ body {
   ]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{title:{display:false,text:'图13：ROE/ROA/ROIC趋势（'+window.__yearSpan+'）',font:{size:16}},datalabels:{display:false}},
-    scales:{y:{title:{display:true,text:'收益率（%）'},ticks:{callback:v=>v+'%'}}}
+    scales:{y:{title:{display:true,text:'收益率（%）'},ticks:{callback:v=>(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'}}}
   }
 });</script>
 
@@ -1004,7 +1004,7 @@ body {
   ]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{title:{display:false,text:'图16：同行关键指标对比（'+window.__yearEnd+'年）',font:{size:16}},datalabels:{display:true,formatter:v=>v.toFixed(2)+'%'}},
-    scales:{y:{ticks:{callback:v=>v+'%'}}}
+    scales:{y:{ticks:{callback:v=>(v==null||isNaN(v))?'':Number(v).toFixed(1)+'%'}}}
   }
 });</script>
 

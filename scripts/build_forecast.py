@@ -54,9 +54,15 @@ def stale_rows(rows, days=FRESH_DAYS):
         d = (r.get('来源日期') or '').strip()
         if not d:
             continue
-        try:
-            dt = datetime.strptime(d, '%Y-%m-%d')
-        except ValueError:
+        dt = None
+        for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%Y.%m.%d'):
+            try:
+                dt = datetime.strptime(d, fmt)
+                break
+            except ValueError:
+                continue
+        if dt is None:
+            print('  ⚠️ 来源日期无法解析，不参与新鲜度闸门: %s' % d, file=sys.stderr)
             continue
         n = (today - dt).days
         if n > days:
@@ -115,7 +121,10 @@ def build_consensus(rows, latest):
     # 反查每个预测年的机构数
     yr_inst = defaultdict(set)
     for r in rows:
-        yr_inst[r['年份'].strip()].add(r['机构'].strip())
+        # agg() 已对 DictReader 短行做 None 安全；这里不能再用 r['年份'] 下标
+        y = (r.get('年份') or '').strip()
+        if y:
+            yr_inst[y].add((r.get('机构') or '').strip())
 
     out = []
     # 指标顺序: 营业收入 / 归母净利润 / EPS / 目标价
@@ -159,7 +168,10 @@ def build_discrete(rows):
 def build_report_md(rows, consensus, e_order, latest, src_note='', agg_note=''):
     yr_inst = defaultdict(set)
     for r in rows:
-        yr_inst[r['年份'].strip()].add(r['机构'].strip())
+        # agg() 已对 DictReader 短行做 None 安全；这里不能再用 r['年份'] 下标
+        y = (r.get('年份') or '').strip()
+        if y:
+            yr_inst[y].add((r.get('机构') or '').strip())
     lines = []
     lines.append('## 一致预期（前瞻）\n')
     lines.append(f'- 覆盖机构数: {len({r["机构"].strip() for r in rows})}')

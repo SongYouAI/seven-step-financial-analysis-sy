@@ -8,8 +8,8 @@
 
 特性:
   - 技术=研发同源检测: 判定"两者非空年份是否全部相等";
-    全等 → 视为同源, 职能合计只取 技术人员, 排除 研发人员(避免重复相加), data_status 标注;
-    部分年份不等 → 分别保留(防误吞真实研发)。
+    全等 → 视为同源, 职能合计只取 技术人员, 排除 研发人员(避免重复相加);
+    部分年份不等 → 分别保留(防误吞真实研发); 判定结果经 info['same_source'] 返回。
   - 闭合校验: 职能合计(生产+销售+财务+技术+行政)=职工总数;
               学历合计(博士+硕士+本科+大专)=职工总数; 两者阈值1%。
   - 人均派生: 人均创收 = 营业收入(主表) / 职工总数。
@@ -137,7 +137,13 @@ def _fmt(v):
 
 def build_emp_block(data, years, rev_per_emp=None, np_per_emp=None):
     same, common = detect_same_source(data)
-    use_rd = not same  # 不同源才单独展示研发
+    has_rd = '研发人员' in data
+    tech_empty = not any(v not in ('', None) for v in data.get('技术人员', {}).values())
+    # 源表只有研发、无技术：用研发替掉职能合计里的技术位，且不输出空技术行。
+    func_keys = [('研发人员' if k == '技术人员' and tech_empty and has_rd else k)
+                 for k in FUNC_SUM]
+    # 无研发序列时不得输出空占位行；有技术数据且不同源时才单列研发。
+    use_rd = has_rd and (not tech_empty) and (not same)
     block = []
     block.append(['员工构成（按专业 / 学历 / 人均派生）'] + [''] * (len(years) + 2))
 
@@ -160,7 +166,7 @@ def build_emp_block(data, years, rev_per_emp=None, np_per_emp=None):
         return out
 
     row('职工总数', '职工总数')
-    for k in FUNC_SUM:
+    for k in func_keys:
         row(k, k)
     if use_rd:
         row('研发人员', '研发人员')

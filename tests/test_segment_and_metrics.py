@@ -169,12 +169,12 @@ def test_report_data_segment():
     names = d.get('BUSINESS_SEGMENT_NAMES')
     assert names and '动力电池系统' in names and '储能电池系统' in names, \
         f"业务板块缺失: {names}"
-    c7 = d.get('CHART7_DATA_SEGMENTS')   # 收入占比 (已是百分比单位, 不×100)
-    c8 = d.get('CHART8_DATA_SEGMENTS')   # 毛利率 (已是百分比单位, 不×100)
+    c7 = d.get('CHART7_DATA_SEGMENTS')   # 收入占比 (统一归一为 % 数值)
+    c8 = d.get('CHART8_DATA_SEGMENTS')   # 毛利率 (统一归一为 % 数值)
     assert c7 and c8, "CHART7/CHART8 为空 (第四步数据未读入图表)"
-    # 动力电池系统 收入占比 2025 = 70.0 (已是%单位, parse_segments 用 as_is 不再×100)
+    # 动力电池系统 收入占比 2025 = 70.0 (% 数值形态，自适应归一不二次 ×100)
     assert abs(c7[0][0] - 70.0) < 1e-6, f"CHART7 首值应为70.0(百分比单位), 实际{c7[0][0]}"
-    # 动力电池系统 毛利率 2025 = 23.0 (已是%单位, parse_segments 用 as_is 不再×100)
+    # 动力电池系统 毛利率 2025 = 23.0 (% 数值形态；小数形态 0.23 才会 ×100)
     assert abs(c8[0][0] - 23.0) < 1e-6, f"CHART8 首值应为23.0(百分比单位), 实际{c8[0][0]}"
     os.remove(sp)
     _ok("test_report_data_segment (图表自动读取第四步业务板块)")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-模块7：图表数据自动生成 (seven-step-financial-analysis v6.6 新增)
+模块7：图表数据自动生成 (seven-step-financial-analysis v2.1.3 修订)
 ===============================================================
 读 Phase 0 产出的 output.csv (+ 可选 forecast_consensus.csv 伴侣文件),
 自动生成报告模板所需的全部图表 JSON 占位符值, 根除"AI 手填 16+ 组图表数组"这一最高频故障。
@@ -47,10 +47,14 @@ def parse_peer(path):
     picked = [r for r in rows if (r.get('报告期') or '').strip() == period]
 
     def col(r, k):
+        # 缺数据填 null，不编造成 0% 柱子（图16 同行未披露时尤其重要）
+        v = str(r.get(k) or '').strip()
+        if not v:
+            return None
         try:
-            return round(float(r.get(k) or 0), 2)
+            return round(float(v), 2)
         except (ValueError, TypeError):
-            return 0
+            return None
     return {
         'CHART16_DATA_PEER_NAMES': [r['公司'].strip() for r in picked],
         'CHART16_DATA_GROSS_MARGIN': [col(r, '毛利率_pct') for r in picked],
@@ -131,12 +135,31 @@ def drop_last(arr):
 # ---------------------------------------------------------------------
 # 分业务板块 (第四步块)
 # ---------------------------------------------------------------------
+def normalize_pct_matrix(rows, label='分业务比率'):
+    """把一整张图的所有板块序列统一归一到「% 数值」单位（65.79 而非 0.6579）。
+
+    output.csv 的核心指标经 to_pct() 已是 61.67；但第四步分业务行由
+    build_segment.py 原样写入，实测存在两种形态：长江电力是小数分数
+    (0.6579)，宁德样例是百分比 (23.0)。按全图非空值最大绝对值判定，
+    ≤1.0 视为小数分数（阈值用 1.0 而非 1.5，否则真实的 1.2% 占比会被 ×100
+    变成 120%）。整图只用一套尺度，避免逐板块判定出现两套量纲。
+    非数值一律填 None（缺数据填 null，不编造）。
+    """
+    nums = [float(x) for r in rows for x in r if isinstance(x, (int, float))]
+    scale = 100.0 if nums and max(abs(x) for x in nums) <= 1.0 else 1.0
+    if scale == 1.0 and any(0 < abs(x) < 1 for x in nums):
+        print('  ⚠️ %s 同图内小数与百分比混合（源表量纲不一致），'
+              '按整图口径保留原值，不猜测单值，请核对源表' % label, file=sys.stderr)
+    return [[round(x * scale, 2) if isinstance(x, (int, float)) else None
+             for x in r] for r in rows]
+
+
 def parse_segments(metrics):
     """返回 (names, seg7_占比, seg8_毛利率)。
 
-    单位说明：build_segment.py 写入 output.csv 时业务占比/毛利率已经是百分比单位
-    (如 23.84 代表 23.84%)，不是小数 (0.2384)。这里必须用 as_is() 而非 to_pct()，否则会双重换算
-    (23.84 → 2384) 导致毛利率显示成几千%的 bug。
+    单位说明：分业务辅助行的比率形态不固定（小数分数 / 百分比数值各半），
+    由 normalize_pct_matrix() 按整图统一归一，禁止一律 to_pct()
+    (23.0 → 2300 的双重换算) 或一律 as_is() (0.6579 显示成 0.6579%)。
     """
     names = []
     for nm in metrics:
@@ -144,12 +167,10 @@ def parse_segments(metrics):
             seg = nm[:-len('-收入占比')]
             if seg not in names:
                 names.append(seg)
-    seg7, seg8 = [], []
-    for seg in names:
-        pct_row = series(metrics, seg + '-收入占比')
-        gm_row = series(metrics, seg + '-毛利率')
-        seg7.append(as_is(pct_row))   # 已是百分比单位，不 ×100
-        seg8.append(as_is(gm_row))    # 已是百分比单位，不 ×100
+    seg7 = normalize_pct_matrix(
+        [as_is(series(metrics, seg + '-收入占比')) for seg in names], '图7 收入占比')
+    seg8 = normalize_pct_matrix(
+        [as_is(series(metrics, seg + '-毛利率')) for seg in names], '图8 毛利率')
     return names, seg7, seg8
 
 
@@ -185,6 +206,8 @@ def _cagr(e):
 
 
 def hist_cagr(arr):
+    if not arr:
+        return None
     a, b = arr[0], arr[-1]
     if a and b and a > 0 and b > 0 and len(arr) > 1:
         n = len(arr) - 1
@@ -351,6 +374,8 @@ def main():
     if template is None:
         template = os.path.join(SK, '..', 'report_template.html')
     if not os.path.exists(template):
+        print('  ⚠️ report_template.html 缺失：未生成 report_prefilled.html，'
+              '下游模块9 无法自动取得 16 图脚本', file=sys.stderr)
         template = None
 
     data, n = build(inp, forecast, peer)
