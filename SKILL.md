@@ -2,12 +2,12 @@
 name: seven-step-financial-analysis
 slug: seven-step-financial-analysis-sy
 displayName: 七步财报分析
-version: 2.1.6
+version: 2.1.7
 author: 松幽（公众号「松幽舒苑」· 视频号「松幽AI」）
 description: 基于《简明财务分析》"七步法"的升级版财报分析skill。内置指标生成引擎（scripts/ 16 个 Python 脚本）与 HYDRO PAPER 暖纸底报告皮肤（三层 CSS + 数据驱动渲染器 + HTML 交付门禁 + 图表库内联自包含单文件 + 作者溯源二维码页脚），无需额外安装依赖即可运行。严格按规范文件执行每步分析，生成独立Markdown报告+最终HTML（默认 HYDRO PAPER 皮肤，可回退深蓝金棕）+PDF双份成品报告。覆盖营收、成本、增长、业务构成、资产负债、投入产出、收益率、商业模式八问、同行对比九大环节。每步按规范要求的数据抽取和分析总结格式执行。支持三种数据来源：本地CSV、内置零依赖在线拉数（A股/港股/美股均由 build_online_puller.py 直连东财 datacenter，见§1.12/§1.13；A股可另选 westock-mcp 等外部源交叉验证）、手动输入；启动自动依赖自检并引导安装缺失数据源（见§1.0），无CSV时亦可闭环产出报告（见§1.1.1 ONLINE档）。v2.1.4 起强制联网核实与来源可核查：六类必查数据、六元组留痕、可点击来源角标与文末汇总、P0-13 静态门禁 + verify_links 验活（见§1.2-b）。分析前先经 Phase 0 指标生成（调用内置 scripts/ 引擎产出 output.csv 标准化指标表，见§1.11），七步分析统一读 output.csv，单入口闭环。v2.1.5 起表格列宽由 enhance_tables() 内容感知统一治理、图表数字标签移出柱体，配 P0-14 静态门禁，杜绝中文短列竖排与数字挤叠（见§19.8）。v2.1.6 起表格改为列级对齐语义（th 与同列 td 同类、年份窄列、表头括注保护、宽表不裁末列），P0-14 增加列级对齐契约，杜绝表头与数据左右错位。
 ---
 
-# 七步财报分析法 Skill（v2.1.6 · 笔记风格 + HYDRO PAPER 皮肤 + 联网核实 + 表格列级对齐版）
+# 七步财报分析法 Skill（v2.1.7 · 笔记风格 + HYDRO PAPER 皮肤 + 联网核实 + 表格列级对齐版）
 
 > 基于饶钢《简明财务分析》提出的"七步法"，专为二级市场投资者设计。数据来源支持本地CSV / **三市场内置零依赖在线拉数**（A股 / 港股 / 美股统一走 build_online_puller.py 直连东财 datacenter；A股可另选外部 MCP 交叉验证） / 手动输入三种方式，无本地CSV时亦可经用户授权联网或MCP拉三张表闭环产出（见§1.0前置依赖自检 与 §1.1.1 ONLINE档、§1.12 港美股拉数、§1.13 A股 ONLINE）。分析前先经 **Phase 0 指标生成**（调用内置 `scripts/` 引擎，把任意来源的财务数据组装成三张原始表 → 产出 `output.csv` 标准化指标表 + 辅助CSV，见§1.11），七步分析统一读 `output.csv` 与 Phase 0 辅助CSV，单入口闭环。使用预定义HTML模板（`report_template.html`）进行占位符填充，确保输出报告CSS一致、图表可用。启动自动依赖自检并引导安装缺失数据源（见§1.0），按资料丰度自适应验证（见§1.1.1），异常点强制✅闭环。
 
@@ -25,6 +25,13 @@ description: 基于《简明财务分析》"七步法"的升级版财报分析sk
 - "帮我分析这家公司的财报" / "seven step financial analysis"
 
 ---
+
+## 零、跨平台执行约定（Windows / macOS / Linux）
+
+- 下文所有命令**在 skill 根目录执行**，脚本一律用相对路径 `scripts/`。不写绝对路径，不写安装目录名。
+- 示例统一写 `python3`。Windows 通常是 `python` 或 `py`，把 `python3` 替换掉即可；macOS / Linux 若只有 `python`，同理替换。Agent 执行时优先用已探测到的解释器。
+- 代码块是 bash 语法。PowerShell 不支持 `VAR=...` 赋值、`$(...)` 子命令替换和反斜杠 `\` 折行；把这些命令写成单行执行。
+- skills 安装目录：macOS / Linux 为 `~/.workbuddy/skills/`，Windows 为 `%USERPROFILE%\.workbuddy\skills\`。仅安装时需要，运行脚本不需要。
 
 ## 一、快速启动
 
@@ -62,7 +69,7 @@ description: 基于《简明财务分析》"七步法"的升级版财报分析sk
 
 > ⚠️ **市场优先判据（v2.0.2 更新）**：**A股 / 港股 / 美股三市场三表均已内置零依赖**，§1.0 自检对任一市场**直接判定通过**，径直进方式B。原 4 个 A股向外部数据源（`westock-mcp` 等）现已全部降级为**交叉验证可选**，不再是任何市场的前置依赖。**不得**因未装外部数据源就走「零数据源→安装引导/降级 WebSearch」分支。
 **执行逻辑（数据源 ≥1 即可；指标生成引擎已内置）**：
-- **指标生成引擎已内置**：Phase 0 调用本 skill 自带的 `scripts/` 目录脚本（`build_metrics.py` 等 8 个）产出 `output.csv`；Python 环境用 `command -v python3` 自动探测。仅当辅助输入为 **xlsx/xls**（分业务/员工）时需免费安装 `openpyxl`（xlsx）或 `xlrd==1.2.0`（老 xls）：`pip install openpyxl xlrd==1.2.0`，纯 CSV 辅助输入无需安装。
+- **指标生成引擎已内置**：Phase 0 调用本 skill 自带的 `scripts/` 目录脚本（`build_metrics.py` 等 8 个）产出 `output.csv`；Python 解释器由当前 Agent 探测（见「零、跨平台执行约定」）。仅当辅助输入为 **xlsx/xls**（分业务/员工）时需免费安装 `openpyxl`（xlsx）或 `xlrd==1.2.0`（老 xls）：`pip install openpyxl xlrd==1.2.0`，纯 CSV 辅助输入无需安装。
 - **数据源 ≥1 即可** —— 但先判市场（见上方⚠️市场优先判据）：
   · **A股 / 港股 / 美股** → 均已内置 `scripts/build_online_puller.py`（东财 datacenter，零依赖）→ 直接可用，**不依赖任何外部数据源**（A股用 F10 三表，港/美用 HKF10/USF10）
   · 外部数据源（`westock-mcp` / `westockdata` / `neodata-financial-search` / `a-stock-data`）**仅作 A股交叉验证可选**
@@ -277,12 +284,11 @@ description: 基于《简明财务分析》"七步法"的升级版财报分析sk
 
 **调用（跨机器可移植，自动探测 Python 路径）**：
 ```bash
-PY="$(command -v python3 || command -v python)"
 # 核心（仅三张表）
-$PY "$HOME/.workbuddy/skills/seven-step-financial-analysis/scripts/build_metrics.py" \
+python3 scripts/build_metrics.py \
   <资产负债表.csv> <利润表.csv> <现金流量表.csv> [输出目录]
 # 或端到端（含可选模块，缺则跳过）
-$PY "$HOME/.workbuddy/skills/seven-step-financial-analysis/scripts/orchestrate.py" \
+python3 scripts/orchestrate.py \
   --in <含3原始表+可选segment/headcount/forecast目录> --out <产出目录>
 ```
 - 输出目录固定 `{公司名}_七步财报分析/02_指标产出/`（对齐现有宁德布局 00→01→02→04）。
@@ -339,8 +345,7 @@ $PY "$HOME/.workbuddy/skills/seven-step-financial-analysis/scripts/orchestrate.p
 
 **调用**：
 ```bash
-PY="$(command -v python3 || command -v python)"
-$PY "$HOME/.workbuddy/skills/seven-step-financial-analysis/scripts/build_online_puller.py" 00700.HK
+python3 scripts/build_online_puller.py 00700.HK
 # 产出落 ./01_中间产物_CSV输入/{资产负债表,利润表,现金流量表}.csv + _meta.json
 # 随后照常走 §1.11 Phase 0：build_metrics.py 三表 → output.csv
 ```
@@ -416,11 +421,10 @@ $PY "$HOME/.workbuddy/skills/seven-step-financial-analysis/scripts/build_online_
 
 **一键闭环**：
 ```bash
-SK=$HOME/.workbuddy/skills/seven-step-financial-analysis/scripts
 # 只拉三表
-python3 "$SK/build_online_puller.py" 601869 --out ./01_中间产物_CSV输入 --years 10
+python3 scripts/build_online_puller.py 601869 --out ./01_中间产物_CSV输入 --years 10
 # 无本地 CSV，直接跑完整流水线（模块 -1 拉数 → 模块 9 最终 HTML）
-python3 "$SK/orchestrate.py" --online-a 601869 --years 10 --out ./产出 \
+python3 scripts/orchestrate.py --online-a 601869 --years 10 --out ./产出 \
   --content content.json --report ./产出/报告.html
 ```
 
@@ -1096,8 +1100,7 @@ Step 5: 产出验证报告MD + 更新最终投资建议
 **推荐：一键流水线**（核心步骤失败立即阻断并非零退出；旧版丢弃全部返回码仍打印「✅ 流水线完成」已修复）：
 
 ```bash
-SK=$HOME/.workbuddy/skills/seven-step-financial-analysis
-python3 "$SK/scripts/orchestrate.py" \
+python3 scripts/orchestrate.py \
   --in <源数据目录> --out <产出目录> \
   --forecast <forecast_input.csv> \
   --md <9步完整版.md> \
@@ -1105,7 +1108,7 @@ python3 "$SK/scripts/orchestrate.py" \
   --report <最终报告.html>
 
 # A股 ONLINE 档：无本地 CSV，模块 -1 自动拉十年年报再跑全链路（见§1.13）
-python3 "$SK/scripts/orchestrate.py" \
+python3 scripts/orchestrate.py \
   --online-a 601869 --years 10 --out <产出目录> \
   --content <content.json> --report <最终报告.html>
 ```
@@ -1128,7 +1131,7 @@ python3 "$SK/scripts/orchestrate.py" \
 5. `capture.py <报告.html> --all --outdir <截图目录>` 分段视觉验收。
 6. 可选：生成 PDF（需要 Playwright，等图表渲染后再转）。
 
-> 路径一律用绝对路径（skill 在 `$HOME/.workbuddy/skills/`）；模板已删除 CDN 兜底，
+> 脚本路径一律用相对路径 `scripts/`（在 skill 根目录执行）；报告输出路径可用绝对路径。模板已删除 CDN 兜底，
 > **v2.1.2 起图表库已整段内联进 HTML**：报告是零远程、零同目录依赖的自包含单文件，
 > 单独复制 / 转发任意一份 HTML 都能出图。同级 `assets/` 仅作旧流程兼容，HTML 不再引用它。
 
@@ -1169,10 +1172,9 @@ python3 "$SK/scripts/orchestrate.py" \
 ### 13.6 生成后验证（可执行门禁）
 
 ```bash
-SK=$HOME/.workbuddy/skills/seven-step-financial-analysis
-python3 "$SK/scripts/check_html.py" <报告.html> --strict-p1
-python3 "$SK/scripts/capture.py" <报告.html> --all --outdir <截图目录>
-python3 "$SK/scripts/validate_content.py" <9步完整版.md> --strict
+python3 scripts/check_html.py <报告.html> --strict-p1
+python3 scripts/capture.py <报告.html> --all --outdir <截图目录>
+python3 scripts/validate_content.py <9步完整版.md> --strict
 ```
 
 `check_html.py` 自动检查：残留 `{{占位符}}`、16 canvas ↔ 16 `__reg`、零远程资源、
@@ -1475,13 +1477,12 @@ CSS 注入顺序固定：`hydro-base` → `hydro-skin` → `sevenstep-adapt`（�
 ### 19.4 三种调用模式
 
 ```bash
-SK=$HOME/.workbuddy/skills/seven-step-financial-analysis/scripts
 # A 数据驱动（新报告，推荐）
-python3 "$SK/render_report.py" --data content.json --out 报告.html
+python3 scripts/render_report.py --data content.json --out 报告.html
 # B 链路衔接（叙事在 content.json，16 图脚本来自 build_report_data.py 的 prefilled）
-python3 "$SK/render_report.py" --data content.json --prefilled 02_指标产出/report_prefilled.html --out 报告.html
+python3 scripts/render_report.py --data content.json --prefilled 02_指标产出/report_prefilled.html --out 报告.html
 # C 旧版换肤（数值零改动，只换版式）
-python3 "$SK/render_report.py" --from-html 旧成品.html --data overrides.json --out 报告.html
+python3 scripts/render_report.py --from-html 旧成品.html --data overrides.json --out 报告.html
 ```
 
 生成器自动：注入三层 CSS + 主题脚本、生成 Hero/目录/9 步卡/附录、把裸图注包成 `.chart-card`、
@@ -1490,8 +1491,8 @@ python3 "$SK/render_report.py" --from-html 旧成品.html --data overrides.json 
 ### 19.5 门禁与验收
 
 ```bash
-python3 "$SK/check_html.py" 报告.html --strict-p1
-python3 "$SK/capture.py" 报告.html --all --outdir ./shots
+python3 scripts/check_html.py 报告.html --strict-p1
+python3 scripts/capture.py 报告.html --all --outdir ./shots
 ```
 
 `check_html.py` 的 P0：残留占位符、16 canvas ↔ 16 `__reg`、远程资源/CDN、三层皮肤在位、
@@ -1508,7 +1509,7 @@ P1：emoji / Markdown 残留、图表卡与表格滚动容器覆盖、Hero 数�
 发布前还需网络验活（门禁本身离线可跑，不依赖网络）：
 
 ```bash
-python3 "$SK/verify_links.py" 报告.html --strict --json ./link_report.json
+python3 scripts/verify_links.py 报告.html --strict --json ./link_report.json
 ```
 
 `verify_links.py` 默认恒 0 只提示，`--strict` 才在明确失效链接时阻断；HEAD 404 → GET 200 会以 GET 复核为准，403/405/429 与超时计 skip 不误报。验活不判断页面是否真的含被引数字，后者按 `references/source-spec.md` 四级颗粒度人工抽查。
@@ -1591,7 +1592,7 @@ python3 "$SK/verify_links.py" 报告.html --strict --json ./link_report.json
 - 图16 需 `peer_comparison.csv`（`--peer`）；缺则由 `build_report_data.py` 写空数组、`render_report.py` 换成「未披露」提示卡，P0-8 反向阻断（v2.0.2 修复：旧版留占位符会触发 P0-1 + 内联 JS 语法错误）。补齐后重新生成自动出图。
 - 期次隔离（如 2026 前三季度不并入十年序列）目前靠 `content.json` 的 `quarantine` 字段与人工纪律，无自动检测。
 - A 股 ONLINE 档已内置（v2.0.2，见 §1.13）；但**东财 F10 与其他数据源存在口径差异**（基准缺失科目、2017 准则列示、2018 追溯重述），换源后 `output.csv` 派生指标会变，**不得声称「零差异」**，须按 §1.13 逐项定性。
-- 本目录与 `seven-step-financial-analysis-sy__skillhub` 是同源双版本，尚未合并；触发时以本目录为准。
+- 本 skill 只有一个权威版本：`seven-step-financial-analysis-sy`（Gitee / GitHub / SkillHub 同步）。本地若残留 `seven-step-financial-analysis` 或 `seven-step-financial-analysis-sy__skillhub`，均为旧副本，勿用。
 
 ### 19.7 发布前自检（v2.1.6）
 

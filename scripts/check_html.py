@@ -114,7 +114,8 @@ def _managed_nodes():
     """
     import glob
     base = Path.home() / '.workbuddy' / 'binaries' / 'node' / 'versions'
-    return sorted(glob.glob(str(base / '*' / 'bin' / 'node')), reverse=True)
+    pats = [str(base / '*' / 'bin' / 'node'), str(base / '*' / 'bin' / 'node.exe')]
+    return sorted({p for pat in pats for p in glob.glob(pat)}, reverse=True)
 
 
 NODE_CANDIDATES = ['node'] + _managed_nodes() + [

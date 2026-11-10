@@ -308,7 +308,8 @@ def em_get(report_name, secucode, page_size=200):
         "-H", "Referer: https://emweb.securities.eastmoney.com/",
     ]
     try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=40).stdout
+        out = subprocess.run(cmd, capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=40).stdout
         d = json.loads(out)
     except Exception as e:
         print("  ⚠️ 请求失败: %s" % e)

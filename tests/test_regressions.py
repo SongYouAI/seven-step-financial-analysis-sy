@@ -269,9 +269,11 @@ class TestRenderer(unittest.TestCase):
 class TestPackageIntegrity(unittest.TestCase):
     def test_version_and_brand(self):
         skill_md = (SK / 'SKILL.md').read_text(encoding='utf-8')
-        m = re.search(r'^version:\s*(\S+)', skill_md, re.M)
-        self.assertIsNotNone(m)
-        self.assertEqual(m.group(1), '2.1.6')
+        m = re.search(r'^version:\s*(\d+\.\d+\.\d+)\s*$', skill_md, re.M)
+        self.assertIsNotNone(m, 'SKILL.md frontmatter 需为三段式 SemVer')
+        readme = (SK / 'README.md').read_text(encoding='utf-8')
+        self.assertIn('v' + m.group(1), readme,
+                      'README 当前版本需与 frontmatter 一致')
         self.assertNotIn('松幽Ai提效', skill_md)
         brand = json.loads((SK / 'assets' / 'brand.json').read_text(encoding='utf-8'))
         self.assertEqual(brand['video'], '松幽AI')

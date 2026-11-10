@@ -1,8 +1,10 @@
-> **当前版本 v2.1.6（2026-11-09）**。权威规范以 `SKILL.md` 为准；本 README 保留早期方法论长文，与 `SKILL.md` 冲突时以 `SKILL.md` 为准。发布前自检见 `SKILL.md` §19.7。
+> **当前版本 v2.1.7（2026-11-10）**。权威规范以 `SKILL.md` 为准；本 README 保留早期方法论长文，与 `SKILL.md` 冲突时以 `SKILL.md` 为准。发布前自检见 `SKILL.md` §19.7。
+
+> **Windows 同学**：先读 `SKILL.md` 的「零、跨平台执行约定」。要点：命令在 skill 根目录执行、脚本用相对路径 `scripts/`；`python3` 换成 `python` 或 `py`；skills 安装目录是 `%USERPROFILE%\.workbuddy\skills\`；代码块为 bash 语法，PowerShell 请把带反斜杠折行的命令写成单行。联网拉数依赖系统 `curl`，Windows 10 1803 及以上自带。截图验收需要本机安装 Google Chrome。
 
 # 七步财报分析法 · Seven-Step Financial Analysis
 
-> **v2.1.6**｜基于饶刚《简明财务分析》「七步法」升级的财报分析引擎。三张原始表 → Phase 0 指标引擎 → 九步分析 → **HYDRO PAPER 研报级 HTML**（16 图 + 交付门禁），全程可离线、零远程资源、零第三方 Python 依赖；**最终 HTML 自包含单文件**（图表库/二维码/三层 CSS 全内联），单独转发也能看图。
+> **v2.1.7**｜基于饶刚《简明财务分析》「七步法」升级的财报分析引擎。三张原始表 → Phase 0 指标引擎 → 九步分析 → **HYDRO PAPER 研报级 HTML**（16 图 + 交付门禁），全程可离线、零远程资源、零第三方 Python 依赖；**最终 HTML 自包含单文件**（图表库/二维码/三层 CSS 全内联），单独转发也能看图。
 
 数据来源支持三档：本地 CSV / **A 股 ONLINE 内置拉数（东财 F10 公开接口）** / 港股美股 ONLINE / 手动输入。没有本地财报也能闭环产出报告。
 
@@ -163,11 +165,12 @@ python3 .../orchestrate.py --in ./raw_csv --out ./out \
 | **v2.0.0** | 沉淀 HYDRO PAPER v3.0 皮肤；新增数据驱动 `render_report.py`、HTML 门禁 `check_html.py`、分段截图 `capture.py`；`orchestrate.py` 改 fail-fast；修复约 42 项 bug |
 | **v2.0.1** | 静默空图 P0-8：缺辅助表改提示卡，门禁反向阻断 |
 | **v2.0.2** | A 股 ONLINE 内置拉数（东财 F10）；修复图16 缺 `peer_comparison.csv` 时残留占位符 P0；换源逐格登记口径差异 |
+| **v2.1.7** | **Windows 跨平台 + 唯一权威版收敛**：SKILL.md 8 处 `$HOME/.workbuddy/skills/...` 硬编码清零、命令统一为 skill 根目录相对路径 `scripts/`、新增「零、跨平台执行约定」；`build_online_puller.py` 补 UTF-8 解码、`check_html.py` 补 `node.exe` 探测；README 补 Windows 安装说明；新增 `.gitattributes` 锁 LF |
 | **v2.1.2** | 修复「报告单独复制/转发后 16 图全白」：图表库整段内联做自包含单文件（P0-11）；修复 A 股 ONLINE 无一致预期时 `null.toFixed` 让图6 整图渲染失败（P0-12）；三模式 + 完整闭环在纯空目录实测 16/16 图真实绘制、console 0 错误 |
 | **v2.1.1** | 修复页脚层级 P0：`footer` 改回 `<body>` 直接子元素，消除 `padding-left` 双重偏移（二维码溯源条不再跑到页面中间）；新增 P0-10 门禁；三档视口坐标验收差为 0 |
 | **v2.1.0** | 公众号 / 视频号二维码 brand 页脚（内嵌 data URI、零远程资源）；新增 P0-9 门禁；`capture.py` 增 `--section footer` |
 
-> 已知限制见 `SKILL.md §19.6`：同源双版本尚未合并；`build_segment.py` 占比量纲假设；`build_forecast.py` 死代码；R4 仍为全文级弱校验；期次隔离依赖 `content.json` 的 `quarantine` 字段与人工纪律。
+> 已知限制见 `SKILL.md §19.6`：`build_segment.py` 占比量纲假设；`build_forecast.py` 死代码；R4 仍为全文级弱校验；期次隔离依赖 `content.json` 的 `quarantine` 字段与人工纪律。
 
 ---
 
